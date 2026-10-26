@@ -1,0 +1,246 @@
+openapi: 3.0.3
+
+info:
+  title: ubiID Signing Notifications API for Tenant
+  description: |
+    # ubiID Signing Tenant Notification API Specification
+
+    ## Overview
+
+    This OpenAPI documents Notification API that an ubiID Tenant **MUST** implement on their side to receive notifications from ubiID.
+
+    The endpoint of this API **SHOULD** be given to ubiID in prior to registration of the Tenant. Request to change the endpoint is supported.
+
+    Notification will call to the configured endpoint whenever document basket status or signer status of document basket has been updated.
+
+    Clients are recommended to ignore unused fields in the WebHook request's payload to avoid unnecessary errors in the event that new fields are added. 
+    
+    ## TLS
+
+    - The implementation of this API **MUST** support HTTPS (`TLS v1.2` and `v1.3`).
+    - Self-signed Certificates are **NOT** supported.
+
+    ## Responses
+
+    The implementation of the API **MUST** respond with a valid HTTP `2xx` status code (preferably *without* response body). ubiID will discard the response body (if any). Other HTTP statuses (3xx, 4xx and 5xx) will be treated as failure and the Retry Policy will be applied.
+
+    ## Request Signature Verification
+
+    Each notification sent to the Tenant's endpoint always include a signature. The signature is generated using a **shared secret** so that the Tenant can verify if the request is sent from ubiID.
+
+    ### Request Headers
+
+    IMPORTANT: Please make sure to configure your Web Application Firewall to let one of the headers passthrough.
+
+    The following headers are sent along with each HTTP request.
+
+    NOTE: Prefixing `X-` with non-standard HTTP headers is a deprecated practice. However, we support `x-ubiid-*` for backward-compatibility.
+
+    #### `ubiid-notification-signature` and `x-ubiid-notification-signature`
+
+    Contains the HMAC-SHA512 signature computed by ubiID. You will need to compute the signature on your side and then compare it with our signature to determine the request is not tampered with.
+
+    #### `ubiid-notification-timestamp` and `x-ubiid-notification-timestamp`
+
+    Contains the timestamp in ISO-8601 format (`YYYYMMDD'T'HHMMSS'Z'`). The time is always in UTC.
+
+    Examples: `20200623T000032Z`
+
+    ### Signature Generation Algorithm
+
+    Clients are recommended to use the WebHook request's body as raw string to verify against the Signature before unmarshalling to object types.
+
+    The following specifies how to verify the signature:
+
+    1 - Prepare the payload.
+
+        * Obtain the timestamp via the HTTP header `ubiid-notification-timestamp`.
+        * Append a pipe (`|`) character.
+        * Append the body of the notification. It MUST be a JSON string with all blank spaces need to be removed so that the whole JSON object is in one line. (This is like applying `JSON.stringify(requestBody)`).
+
+    2 - Use the shared *Secret* to compute a `HMAC-SHA512` using the payload as the message.
+
+    3 - Compare the computed signature with the one sent in `ubiid-notification-signature`.
+
+    ## Retry Policy
+
+    ubiID will retry the notification in case of failure with exponential backoff policy that will increase the wait time for each retry attempt until max number of attempts is reached. The maximum of notification will be 5 times.
+
+  contact:
+    email: m_ideal@mesoneer.io
+  version: 3.32.0
+  
+tags:
+  - name: ubiId-signing-notification
+    description: ubiID Signing Notification
+
+servers:
+- url: https://ubiid-dev.ubitec.io/api/v1
+- url: https://ubiid.ubitec.io/api/v1
+
+paths:
+  "/notifications-webhook-document-basket/":
+    post:
+      tags:
+        - ubiId-signing-notification
+      summary: Receives Notifications from ubiID for ubiID Case States or related signing status.
+      operationId: receiveSigningNotification
+      parameters:
+        - name: ubiid-notification-signature
+          in: header
+          description: the Signature of the current request.
+          schema:
+            type: string
+          required: true
+        - name: ubiid-notification-timestamp
+          in: header
+          description: the timestamp in ISO-8601 format.
+          schema:
+            type: string
+            pattern: '^\d{8}T\d{6}Z$'
+            example: "20200623T000032Z"
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UbiIDSigningNotification'
+      responses:
+        200:
+          description: Confirmed! The response's body will be ignored (if any).
+        204:
+          description: Confirmed! No Content.
+
+components:
+  schemas:
+    DocumentBasketStatus:
+      type: string
+      description: |
+        * `OUTSTANDING` - For none of the signers, the signing request was initialized.
+        * `SIGNED_PARTIALLY` - A part of the assigned signers has already signed the document.
+        * `SIGNED` - All signers have signed the document.
+        * `REJECTED` - At least one assigned signer has rejected the signing. The overall status of the document becomes rejected as the document is legally not valid due to the fact that not all required signers have signed the document.
+        * `FAILED` - There was either a technical problem with the signing process or the signing was not done on time by at least one of the signers.
+        * `DOWNLOADED` - The signed documents were downloaded by the API.
+        * `DELETED` - The files are not available anymore. The complete deletion is triggered X days after a document basket was marked as `DELETED_TEMPORARY`.
+        * `DELETED_TEMPORARY` - X days after a document was downloaded by the API the document basket is marked as temporary deleted.
+        * `CORRUPTED` - The signed documents were downloaded by the API but sign report failed to generate.
+      enum:
+        - OUTSTANDING
+        - SIGNED_PARTIALLY
+        - SIGNED
+        - REJECTED
+        - FAILED
+        - DOWNLOADED
+        - DELETED
+        - DELETED_TEMPORARY
+        - CORRUPTED
+
+    SignersRequest:
+      type: object
+      required:
+        - ubiIdCaseId
+        - ubiIdStatus
+      properties:
+        signerId:
+          type: string
+          format: uuid
+          description: Identifier of signer
+        ubiIdCaseId:
+          type: string
+          format: uuid
+          description: ubiID identifier of the signer
+        extPersonId:
+          type: string
+          description: external id of person from request signer list
+        signingStatus:
+          $ref: '#/components/schemas/SigningStatus'
+
+    SigningStatus:
+      type: string
+      description: |
+        This status represents the signing status of this signer.
+        * `NO_SIGNING`: no signing will be done (UMB_ID is used without signing or no documentBasket assigned).
+        * `OUTSTANDING`: the signing will be initialized as soon as the identification is done.
+        * `PENDING`: the signing is initialized but not yet signed.
+        * `SIGNED`: the signing was done successfully.
+        * `REJECTED`: the signer rejected the signing.
+        * `FAILED`: the signing failed due to technical issues or because the signing request was expired.
+        * `TIMEOUT`: the signing session is timeout.
+      enum:
+        - NO_SIGNING
+        - OUTSTANDING
+        - PENDING
+        - SIGNED
+        - REJECTED
+        - FAILED
+        - TIMEOUT
+
+    Document:
+      type: object
+      required:
+        - documentId
+      properties:
+        documentId:
+          $ref: '#/components/schemas/DocumentId'
+        extDocumentId:
+          $ref: '#/components/schemas/ExtDocumentId'
+        displayName:
+          type: string
+
+    DocumentId:
+      description: Internal document reference generated by ubiSign.
+      type: string
+      format: uuid
+
+    ExtDocumentId:
+      description: External id of document
+      type: string
+      example: '123456789'
+
+    UbiIDSigningNotification:
+        type: object
+        required:
+          - documentBasketId
+          - documentBasketStatus
+          - signers
+        properties:
+          id:
+            type: string
+            format: uuid
+            description: id of notification request.
+          tenantId:
+            type: string
+            format: uuid
+          extCaseId:
+            type: string
+            description: Value provided from POST document-basket request
+          extApplication:
+            type: string
+            example: SELFONBOARDING
+            description: Value provided from POST document-basket request
+          costCenter:
+            type: string
+            description: Cost center can be defined by customer.
+          documentBasketId:
+            type: string
+            format: uuid
+            description: id of document basket. A document basked is a group of documents signed by the same persons (list of document posted)
+          documentBasketStatus:
+            $ref: '#/components/schemas/DocumentBasketStatus'
+          signers:
+            type: array
+            items:
+              $ref: '#/components/schemas/SignersRequest'
+          documents:
+            type: array
+            items:
+              $ref: '#/components/schemas/Document'
+            nullable: true
+          signerDownloadedDocuments:
+            type: boolean
+            description: |
+              * `true`  - when 2 flags "signSuccessPageStep" and "buttonCompletionStepDisplayed" in signProfile are both on.
+              * `false` - when flag "signSuccessPageStep" is on , but not "buttonCompletionStepDisplayed".
+              * `null`  - other cases.

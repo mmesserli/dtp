@@ -1,0 +1,81 @@
+﻿ubiIdStatusReason,ubiIdStatusDetails,Description
+ABORTED,AUDIO_OTHER,Any other audio issues not covered by other reasons.
+ABORTED,BAD_AUDIO,Audio is not of enough quality to continue with the call.
+ABORTED,BAD_AUDIO_ENVIRONMENT,Audio disturabce in the call.
+ABORTED,BAD_PHOTO_QUALITY,ID and/or User photo is not of good quality to successfully conclude the identification.
+ABORTED,BAD_VIDEO,"Video call established, but is not of enough quality to continue."
+ABORTED,CALL_QUALITY_FAIL (not activated),During network pre-check; the network bandwidth is found to be lower than expected to conduct a successful video call.
+ABORTED,CONNECTION_BAD,Connection is not good quality to continue.
+ABORTED,CONNECTION_LOST,Call connection lost.
+ABORTED,CONNECTION_OTHER,Any Other issues with connection not covered by other reasons.
+ABORTED,DATA_APPLICATION_ADDRESS,Address from application does not match address from ID document and cannot be corrected.
+ABORTED,DATA_APPLICATION_DATA,Data from application and data from the ID document do not match and cannot be corrected.
+ABORTED,DATA_ID_EXPIRED,The validity date of the ID document has expired. User must use a different document.
+ABORTED,DISAGREE_WITH_VIDEO_RECORDING,User disagrees with Video Recording of the call.
+ABORTED,ENROLLED_TO_WAITING_LIST (not activated),"User has been put on the waiting-list. Depending on the configuration, this can be voluntary or mandatory, or a mix of both."
+ABORTED,ID_DAMAGED,User is using an ID document that is damaged and not fit for the online identification process.
+ABORTED,ID_NOT_SUPPORTED,User is using an ID document that is not supported for the online identification process.
+ABORTED,ID_OTHER,Any other ID related issue not covered by other reasons.
+ABORTED,IDENT_CODE_NOT_RECEIVED,Ident code SMS/email not received by the user.
+ABORTED,IDENT_CODE_REPEATEDLY_INCORRECT,User entered wrong Ident Id multiple times.
+ABORTED,INCORRECT_ID_NUMBER,ID number is wrongly entered during identification
+ABORTED,INCORRECT_NAME_IN_QES,Only for eSigning. Name mismatch found after QES generation.
+ABORTED,INDECENT_BEHAVIOUR,User exhibited behavior towards agent that is indecent.
+ABORTED,NO_AUDIO,No audio established between Agent and User.
+ABORTED,NO_CONNECTION,Connection between Agent and User not established due to network issues.
+ABORTED,NO_VIDEO,Video call could not established. User and Agent do not see each other.
+ABORTED,OTHER_ABUSE,Abuse of the procedure. Inappropriate behavior.
+ABORTED,OTHER_ERROR,"Any other error, not further defined."
+ABORTED,OTHER_MISCELLANEOUS_PERMANENT,"Other error, which is not covered by specific error. Cannot be solved."
+ABORTED,OTHER_MISCELLANEOUS_TEMPORARY,"Other error, which is not covered by specific error. Can be solved by a retry."
+ABORTED,OTHER_TEST,Identification was a test call.
+ABORTED,PHOTO_OTHER,Other problems related to the photo.
+ABORTED,STALLED_TIMEOUT,"When an identification process is running for too long, then the identification request will be cancelled with this reason."
+ABORTED,TECH_AUDIO,Poor audio quality. Audio quality is poor or user/agent inaudible.
+ABORTED,TECH_DISCONNECTED_VIDEO,The video stream has disconnected during the identification.
+ABORTED,TECH_DISCONNECTED_WEBSOCKET,The websocket connection is disconnected during the identification. Normally caused by loss of internet connection by the user.
+ABORTED,TECH_HOLOGRAM,Security features not visible or broken. No suspicion of fraud.
+ABORTED,TECH_ID_TYPE,ID document is not allowed or is not supported.
+ABORTED,TECH_IDENT_CODE_DELIVERY,User was unable to receive the ident code SMS.
+ABORTED,TECH_INTERNAL_SERVER_ERROR,An error occurred on server.
+ABORTED,TECH_INTERNET_CONNECTION,Internet connection of the user is not fast enough.
+ABORTED,TECH_LIGHTING,Poor lighting. Person or ID document not sufficiently visible.
+ABORTED,TECH_PHOTO,Poor photo quality. Person or ID document not sufficiently sharp and recognizable.
+ABORTED,TECH_TIMEOUT,The identification request was open too long. Identification requests get aborted after 30 minutes.
+ABORTED,TECH_VIDEO,Poor video quality or camera not good enough. Person or ID document not sufficiently sharp and recognizable.
+ABORTED,USER_ABORT_WHILE_WAITING,User has aborted the identification while he was waiting for an available agent.
+ABORTED,USER_CANCELLATION,User has aborted the identification without chosing a reason.
+ABORTED,USER_CANCELLATION_AGENT_BEHAVIOUR,User aborted chosing Reason Bad Agent Behaviour
+ABORTED,USER_CANCELLATION_APP_NOT_RESPONDING,User aborted chosing Reason App not Responding
+ABORTED,USER_CANCELLATION_IDENT_LANGUAGE,User aborted chosing Reason Ident Language
+ABORTED,USER_CANCELLATION_IDENTIFY_LATER,User aborted chosing Reason I will Identify Later
+ABORTED,USER_CANCELLATION_OTHER,User aborted chosing Reason Other
+ABORTED,USER_CANCELLATION_PRIVACY_CONCERNS,User aborted chosing Reason Privacy Concerns
+ABORTED,USER_CANCELLATION_USER_NOT_INTERESTED,User aborted chosing Reason Not Interested
+ABORTED,USER_ID_NUMBER,User repeatedly reads the wrong ID document number.
+ABORTED,USER_IDENT_CODE,Ident code repeatedly entered incorrectly.
+ABORTED,USER_LANGUAGE,User speaks unsupported language.
+ABORTED,USER_NO_ID,User has currently no ID card available.
+ABORTED,USER_STARTED_NEW_REQUEST,User has started another ident attempt from different channel (web/app).
+ABORTED,USER_WRONG_PERSON,"The person of application and identification do not match. For example, husband has opened bank account, but wife is in the identification call. No suspicion of fraud."
+ABORTED,VIDEO_ENVIRONMENT,User is not in ideal conditions to perform the video call.
+ABORTED,VIDEO_OTHER,Any other problem with video not covered by other reasons.
+ABORTED,WRONG_PHONE_NUMBER,Only for eSigning. User entered wrong phone number.
+FRAUD_SUSPICION_CONFIRMED,DOCUMENT_TAMPERED,Photo of the person or other data is manipulated on the Identification document.
+FRAUD_SUSPICION_CONFIRMED,FACE_COMPARISON_UNMATCHED,Person in front of camera is not the same as on Identification document
+FRAUD_SUSPICION_CONFIRMED,IDENTITY_FAKED,User trying to fake an Identitiy.
+FRAUD_SUSPICION_CONFIRMED,SECURITY_FEATURE,Security features like holograms on the Identification document are not real.
+FRAUD_SUSPICION_CONFIRMED,SUSPECTED_FORGERY,Suspected complete forgery of identification document.
+FRAUD_SUSPICION_CONFIRMED,SUSPECTED_MANIPULATION,Data is manipulated on the Identification document.
+FRAUD_SUSPICION_CONFIRMED,WARNING_DESCRIPTION,Other Fraud
+FRAUD_SUSPICION_CONFIRMED,WARNING_FAKE_ID,Identification document is a specimen document and not real document.
+FRAUD_SUSPICION_CONFIRMED,WARNING_FAKED_MANIPULATED_ID,Identification document is a specimen document and not real document.
+FRAUD_SUSPICION_CONFIRMED,WARNING_FRAUD_OTHER,Any other type of fraud identified during the verification process by Ident specialist.
+FRAUD_SUSPICION_CONFIRMED,WARNING_ID_MANIPULATION,Data is manipulated on the Identification document.
+FRAUD_SUSPICION_CONFIRMED,WARNING_IDENTITY_THEFT,Person in front of camera trying to steal somebody's identity.
+FRAUD_SUSPICION_CONFIRMED,WARNING_INCONSISTENT_DATA,Overall data is inconsistent. (f. e. Name on document)
+FRAUD_SUSPICION_CONFIRMED,WARNING_PHOTO,Something is wrong with the photo.
+FRAUD_SUSPICION_CONFIRMED,WARNING_SOCIAL_ENGINEERING,Social Engineering.
+FRAUD_SUSPICION_CONFIRMED,WARNING_USER_UNDERAGE,User is underage.
+FRAUD_SUSPICION_CONFIRMED,WARNING_WRONG_CHECKSUM,MRZ Check sum does not match
+,,

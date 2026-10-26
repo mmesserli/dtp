@@ -1,0 +1,3573 @@
+openapi: 3.0.3
+
+info:
+  title: m_IDeal Schedule Cases API for Tenant
+
+  description: |
+    # m_IDeal Scheduled Cases
+
+    ## Overview
+
+    This documents API for Tenant to integrate with m_IDeal. A Tenant can _schedule_ a m_IDeal case and then allow their end user to start the identification themselves.
+
+    ### A few conventions:
+    
+    - Resources are represented in plural form.
+    - Words in each path segment are separated by hyphens "-"
+
+    ## Authentication
+
+    m_IDeal will grant you an API token (JWT) with a lifetime (by default) of 1 year. This JWT token **MUST** be included in the header `Authorization: Bearer {{ TOKEN }}`.
+
+    ## Changes:
+
+    - Renamed `ubiIdCategoryCode` field in request/response body into `ubiIdCategory` and is now optional.
+    - `initialPersonData` field is now optional
+
+
+  contact:
+    email: m_ideal@mesoneer.io
+  version: 3.35.0
+
+servers:
+  - url: https://sandbox-autoid.id-validation.ch/api/v1
+
+tags:
+  - name: scheduled-cases
+    description: Operations related to scheduled cases
+
+paths:
+
+  "/{tenantId}/id-cases/schedule":
+    post:
+      operationId: createScheduledCase
+      parameters:
+        - $ref: "#/components/parameters/tenantId"
+      
+      tags:
+        - scheduled-cases
+      summary: Create a new scheduled case
+      security:
+        - jwt: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleCaseRequest"
+
+      responses:
+        201:
+          description: Created!
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleCaseResponse"
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  "/{tenantId}/scheduled-cases/{caseId}/start":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+    post:
+      operationId: resumeScheduledCase
+      tags:
+        - scheduled-cases
+      summary: Resume a scheduled case
+      security:
+        - jwt: []
+
+      responses:
+        200:
+          description: Case status updated into INITIALIZED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UbiIdNewCaseResponse'
+        404:
+          description: Case not found or tenant not found
+        403:
+          description: Case cannot be resumed.
+          
+  "/{tenantId}/scheduled-cases/{caseId}":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+    put:
+        tags:
+          - scheduled-cases
+        summary: Update scheduled case `eIdIdType` and `issuerCountry`
+        security:
+          - jwt: []
+          
+        requestBody:
+          required: true
+          content:
+            "application/json":
+              schema:
+                $ref: '#/components/schemas/UbiIdUpdateCaseRequest'
+          
+        responses:
+          204:
+            description: Case information updated successfully
+          400:
+            description: Case information cannot be updated because of invalid params
+
+  "/{tenantId}/scheduled-cases/{caseId}/complete":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+    post:
+      tags:
+        - scheduled-cases
+      summary: Update scheduled case status using eID result for External Application
+      security:
+        - jwt: [ ]
+      description: |
+        This API is specially designed so that on End User UI, once the VideoID process settles (either success or fail)
+      operationId: callbackIdentificationCase
+
+      requestBody:
+        required: true
+        content:
+          'application/json':
+            schema:
+              $ref: "#/components/schemas/IdentificationCaseCompleteRequest"
+
+      responses:
+        200:
+          description: ok
+          content:
+            'application/json':
+              schema:
+                $ref: "#/components/schemas/IdentificationCaseCompleteResponse"
+        404:
+          description: Case ID not found
+        400:
+          description: Case cannot be updated because of invalid params.
+        403:
+          description: The configuration disabled updating case.
+          
+  "/{tenantId}/scheduled-cases/{caseId}/status":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+    get:
+      operationId: getScheduledCaseStatus
+      tags:
+        - scheduled-cases
+      summary: Get status of a case
+      security:
+        - jwt: []
+      
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseStatusResponse"
+        404:
+          description: Case not found or tenant not found
+  
+  "/{tenantId}/id-cases/{caseId}":
+    get:
+      tags:
+        - scheduled-cases
+      summary: Get detail information of a case
+      operationId: getUbiIdCase
+      security:
+        - jwt: []
+
+      parameters:
+        - $ref: "#/components/parameters/tenantId"
+        - $ref: "#/components/parameters/caseId"
+      
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UbiIdScheduledCase"
+        404:
+          description: Case has been deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  "/{tenantId}/id-cases/{caseId}/info":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+    get:
+      operationId: getCaseInfo
+      tags:
+        - scheduled-cases
+      summary: Get Fraud Check initialization info
+      description: |
+        Retrieves fraud check initialization information for a case. 
+        Creates a new session ID if none exists, or returns the existing session ID for the case.
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FraudCheckInitResponse'
+        400:
+          description: User is not allowed to generate threatMetrix session id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Case not found or tenant not found
+
+  "/{tenantId}/id-cases/{caseId}/files.zip":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+      - $ref: "#/components/parameters/archiveFolders"
+      - $ref: '#/components/parameters/acceptOverride'
+    get:
+      tags:
+        - scheduled-cases
+      summary: Download all files available in a Case as a Zip file, except `*_original.pdf` and `*_signed.pdf` files if exist.
+      description: |
+        **IMPORTANT**:
+        The response will be in `application/octet-stream` format if the `Accept` header value is `*/*`, `application/json`, or `application/octet-stream`.
+        To return a zip file encoded in JSON format, set `application/zip+json` for the `Accept` header or use the `Accept-Override` header instead.
+      operationId: getCaseFilesAsZip
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: ok
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Base64EncodedFile'
+          headers:
+            Content-Disposition:
+              description: |
+                **Note**: This header will be not available when the media type is application/json 
+                
+                Instruct the User-Agent how to deal with the binary content.
+                This operation **always** use `Content-Disposition: attachment`.
+              schema:
+                type: string
+              examples:
+                download:
+                  value:
+                    - attachment; filename="video.mp4"
+
+  "/{tenantId}/id-cases/{caseId}/documents":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+      - in: query
+        name: type
+        required: true
+        schema:
+          $ref: "#/components/schemas/IdCaseDocumentType"
+    get:
+      tags:
+        - scheduled-cases
+      summary: Download document belongs to identification case
+      operationId: getIdCaseDocument
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: PDF document file
+          content:
+            'application/pdf':
+              schema:
+                type: string
+                format: binary
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        500:
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  "/{tenantId}/id-cases/{caseId}/revoke":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+    put:
+      tags:
+        - scheduled-cases
+      summary: Revoke m_ID Case
+      description: |
+        Revoke m_ID Case
+      operationId: revokeCase
+      security:
+        - jwt: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UbiIdRevokeCaseRequest"
+        required: false
+      responses:
+        200:
+          description: Successfully revoke the case entity
+        404:
+          description: Case not found or tenant not found
+        400:
+          description: Case cannot be revoked because of param expirationTimestamp already passed.
+        403:
+          description: |
+            Case status isn't allowed to be revoked. For e.g:
+            * `IDENTIFICATION_SUCCESSFUL`
+            * `VERIFICATION_CONFIRMED`
+            * `DOWNLOADED`
+            * `DELETED`
+            * `DELETED_TEMPORARY`
+            * `DELETED_MARKED`
+
+  "/{tenantId}/id-cases/{caseId}/verification-result":
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+      - $ref: "#/components/parameters/caseId"
+    post:
+      tags:
+        - scheduled-cases
+      summary: Tenant review
+      security:
+        - jwt: [ ]
+      description: |
+        This API is specially designed so that tenant can review the verification result.
+      operationId: verificationResult
+
+      requestBody:
+        required: true
+        content:
+          'application/json':
+            schema:
+              $ref: "#/components/schemas/VerificationResultRequest"
+
+      responses:
+        200:
+          description: ok
+          content:
+            'application/json':
+              schema:
+                $ref: "#/components/schemas/VerificationResultResponse"
+        404:
+          description: Case ID not found
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  "/public/tenants/{tenantId}/ais-registration-pdf/public-cert":
+    get:
+      tags:
+      - public
+      parameters:
+        - $ref: "#/components/parameters/tenantId"
+      summary: Get public key and certificate information
+      description: |
+        The API will provide information of PKCS#1 RSA Public Key (RFC3447) encoding in PEM format, expiration timestamps, and an X.509 Version 3 Certificate (RFC 5280) of the key.
+        A new public key will be generated and returned before the current one expires in two weeks.
+      operationId: getPublicKey
+      responses:
+        '200':
+          description: Ais signing response with public key and certificate information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AisSigningResponse"
+        '404':
+          description: No activated keys found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  "/{tenantId}/actuator/health":
+    get:
+      parameters:
+        - $ref: "#/components/parameters/tenantId"
+      tags:
+        - actuator
+      operationId: forwardActuator
+      summary: Get tenant-specific health status
+      description: |
+        Returns a simple health status for the tenant-specific context.
+        This endpoint provides a basic health check response without performing detailed connectivity checks.
+
+        **Health Check**: This API returns a basic health status indicator:
+        - Returns a simple "UP" status response
+        - Does not perform detailed connectivity checks to dependencies (databases, diskSpace, ssl, etc.)
+        - Intended for basic availability monitoring
+
+        **Rate Limiting**: This endpoint is subject to rate limiting to prevent abuse and ensure system stability.
+        - Rate limit: 120 requests per minute per tenant
+        - Exceeding the rate limit will result in HTTP 429 (Too Many Requests) response
+        - Rate limit headers are included in responses to indicate current usage and limits
+      responses:
+        200:
+          description: Actuator data forwarded successfully
+          content:
+            'application/json':
+              schema:
+                type: object
+                description: Actuator response data (varies by actuator endpoint)
+                example:
+                  status: "UP"
+        404:
+          description: Actuator endpoint not found
+        429:
+          description: Too Many Requests - Rate limit exceeded
+
+components:
+  parameters:
+    tenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    caseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    archiveFolders:
+      name: archiveFolders
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: The option to return all archive folder in the zip file
+
+    acceptOverride:
+      name: Accept-Override
+      in: header
+      required: false
+      description: |
+        Override the `Accept` header and specify Media Type of the response format data. This field value should comply with RFC 6838.
+        Supported override values:
+        * `application/zip+json` - Zip file will be encoded and returned in `application/json` format
+        * `application/pdf+json` - PDF file will be encoded and returned in `application/json` format
+      schema:
+        type: string
+        example: 'application/zip+json'
+
+  securitySchemes:
+    jwt:
+      type: http
+      description: Default Authentication/Authorization
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    FraudCheckInitResponse:
+      type: object
+      description: Fraud Check initialization info
+      properties:
+        sessionId:
+          type: string
+          description: The ThreatMetrix session id
+          example: "d2e5b8a8-7d4b-4e2e-9f22-8f1a2c4b9c1a"
+        domain:
+          type: string
+          description: ThreatMetrix domain is used to map the profiling script base-url in the check function
+          example: "example.com"
+        organizationId:
+          type: string
+          description: ThreatMetrix organization id is used to map the profiling script organization id in the check function
+          example: "your-org-id"
+
+    UbiIdScheduledCase:
+      type: object
+      properties:
+        tenantId:
+          description: The id of the Tenant to receive the notification.
+          type: string
+          format: uuid
+        ubiIdcaseId:
+          description: The id of the identification case that was updated.
+          type: string
+          format: uuid
+        extPersonId:
+          nullable: true
+          description: Person Id of external application.
+          type: string
+        identityProfile:
+          description: The numeric id of a pre-configured profile.
+          type: integer
+        language:
+          $ref: '#/components/schemas/Language'
+        extCaseId:
+          description: External Case Id can be set by the external application.
+          type: string
+          nullable: true
+        extApplication:
+          description: name of application ubiId service was called.
+          type: string
+          nullable: true
+        ubiIdCategory:
+          description: category of identification case. can be used for filtering in ubiId Backoffice application.
+          type: string
+          nullable: true
+        expirationTimestamp:
+          description: The datetime when this identification case is no longer resumable.
+          type: string
+          format: date-time
+          example: "2020-11-21T15:23:23"
+        ubiIdStatus:
+          $ref: '#/components/schemas/UbiIdStatus'
+        registrationStatus:
+          $ref: '#/components/schemas/RegistrationStatus'
+        initialPersonData:
+          allOf:
+            - $ref: '#/components/schemas/UbiIdPerson'
+          nullable: true
+        autoIdData:
+          $ref: '#/components/schemas/IdentificationData'
+        verificationData:
+          $ref: '#/components/schemas/VerificationData'
+        integrityChecksResult:
+          $ref: '#/components/schemas/IntegrityChecksResult'
+        termsConditionsAcceptanceTimestamp:
+          type: string
+          format: date-time
+        ubiIdStatusReason:
+          allOf:
+            - $ref: '#/components/schemas/UbiIdStatusReason'
+          nullable: true
+          description: The reason that the case status is updated.
+        ubiIdStatusDetails:
+          description: The details for that reason.
+          type: string
+          nullable: true
+        reviewComment:
+          type: string
+          description: review comment of verification from identification provider
+          nullable: true
+        identificationRedirectUrls:
+          $ref: '#/components/schemas/IdentificationRedirectUrls'
+        signatureImageStatus:
+          type: string
+          nullable: true
+          description: the signature status for the document
+        evidenceImportStatus:
+          allOf:
+            - $ref: '#/components/schemas/EvidenceImportStatus'
+          nullable: true
+        isRevoked:
+          description: whether this case is revoked or not.
+          type: boolean
+        termsAndConditionsAlreadyAccepted:
+          description: |
+            Option to skip legal step on identification flow.
+            Can only be `true` when attribute `allowExternalAcceptanceOfTermsAndConditions` in profile is enabled, otherwise `false`.
+          type: boolean
+        dataChecks:
+          description: list of data check results
+          type: array
+          items:
+            $ref: '#/components/schemas/DataCheckDetail'
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+          nullable: true
+        fraudRisk:
+          description: Fraud risk.
+          $ref: '#/components/schemas/FraudRisk'
+        identificationLoadingDisplayed:
+          description: Loading page is displayed.
+          type: boolean
+        identificationSuccessInsideIframe:
+          description: Receive the success message from inside iframe.
+          type: boolean
+
+    FraudRisk:
+      type: object
+      description: Fraud risk.
+      nullable: true
+      properties:
+        risk_rating:
+          description: Risk rating.
+          nullable: true
+        riskCode:
+          description: Risk code.
+          type: array
+          items:
+            type: string
+          nullable: true
+        fraudCheckId:
+          type: string
+          format: uuid
+          description: Unique identifier for the fraud check.
+          nullable: true
+        request_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the request.
+          nullable: true
+        risk_score:
+          type: string
+          description: Risk score associated with the fraud assessment.
+          nullable: true
+        risk_rules:
+          type: array
+          description: List of rules contributing to the fraud risk assessment.
+          items:
+            $ref: '#/components/schemas/RiskRule'
+        device:
+          $ref: '#/components/schemas/Device'
+        network:
+          $ref: '#/components/schemas/Network'
+        digitalId:
+          $ref: '#/components/schemas/DigitalId'
+        account:
+          $ref: '#/components/schemas/Account'
+        sessionHistory:
+          $ref: '#/components/schemas/SessionHistory'
+        identDeviceHistory:
+          type: array
+          description: History of ThreatMetrix sessions for the case, ordered chronologically (oldest first).
+          items:
+            $ref: '#/components/schemas/IdentDeviceHistory'
+          nullable: true
+
+    SessionHistory:
+      type: object
+      description: Aggregate counts of distinct values across the case's ThreatMetrix sessions.
+      nullable: true
+      properties:
+        numberOfDeviceIds:
+          type: integer
+          description: Number of distinct device IDs across all sessions.
+        numberOfTrueIpGeo:
+          type: integer
+          description: Number of distinct true IP geo locations across all sessions.
+        numberOfTrueIpRegionIsoCodes:
+          type: integer
+          description: Number of distinct true IP region ISO codes across all sessions.
+
+    IdentDeviceHistory:
+      type: object
+      description: Fraud-relevant data for a single ThreatMetrix session.
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Time the session was last updated.
+          nullable: true
+        step:
+          type: string
+          description: Identification step the session belongs to.
+          nullable: true
+        deviceId:
+          type: string
+          description: Unique identifier for the device.
+          nullable: true
+        risk_rating:
+          type: string
+          description: Risk rating of the session.
+          nullable: true
+        risk_score:
+          type: string
+          description: Risk score associated with the session.
+          nullable: true
+        risk_rule_categories:
+          type: array
+          description: Categories of triggered risk rules.
+          items:
+            type: string
+          nullable: true
+        true_ip_address:
+          type: string
+          description: True IP address of the request.
+          nullable: true
+        true_ip_geo:
+          type: string
+          description: Geographical location code of the IP address (e.g., CH for Switzerland).
+          nullable: true
+        true_ip_region_iso_code:
+          type: string
+          description: ISO code for the region of the IP address.
+          nullable: true
+        true_ip_city:
+          type: string
+          description: City associated with the IP address.
+          nullable: true
+        browser_spoof_rating:
+          type: string
+          description: Rating indicating likelihood of browser spoofing (e.g., low, high).
+          nullable: true
+        vpn_rating:
+          type: string
+          description: Rating indicating likelihood of VPN usage (e.g., low, high).
+          nullable: true
+
+    RiskRule:
+      type: object
+      description: Represents a single rule contributing to the fraud risk assessment.
+      properties:
+        rid:
+          type: string
+          description: Unique identifier for the risk rule.
+          nullable: true
+        score:
+          type: string
+          description: Score associated with the risk rule.
+          nullable: true
+        reason_code:
+          type: string
+          description: Reason code for the risk rule (e.g., Device_blocked, email_known).
+          nullable: true
+
+    Account:
+      type: object
+      description: Represents account details.
+      nullable: true
+      properties:
+        account_first_name:
+          type: string
+          description: First name of the account holder.
+          nullable: true
+        account_last_name:
+          type: string
+          description: Last name of the account holder.
+          nullable: true
+        account_address_zip:
+          type: string
+          description: ZIP code of the account holder's address.
+          nullable: true
+        account_address_city:
+          type: string
+          description: City of the account holder's address.
+          nullable: true
+        account_address_street_1:
+          type: string
+          description: Primary street address of the account holder.
+          nullable: true
+        account_address_street_2:
+          type: string
+          description: Secondary street address of the account holder.
+          nullable: true
+        account_telephone:
+          type: string
+          description: Telephone number of the account holder.
+          nullable: true
+        account_telephone_first_seen:
+          type: string
+          description: Date when the telephone number was first seen.
+          nullable: true
+        account_telephone_activities:
+          type: array
+          description: List of activities associated with the telephone number.
+          items:
+            type: string
+          nullable: true
+        account_email:
+          type: string
+          description: Email address of the account holder.
+          nullable: true
+        account_email_first_seen:
+          type: string
+          description: Date when the email address was first seen.
+          nullable: true
+        account_email_activities:
+          type: array
+          description: List of activities associated with the email address.
+          items:
+            type: string
+          nullable: true
+
+    DigitalId:
+      type: object
+      description: Represents digital identity information.
+      nullable: true
+      properties:
+        digital_id:
+          type: string
+          description: Unique digital identifier for the user or device.
+          nullable: true
+        digital_id_first_seen:
+          type: string
+          description: Date when the digital ID was first seen.
+          nullable: true
+        digital_id_confidence_rating:
+          type: string
+          description: Confidence rating for the digital ID (e.g., low, medium, high).
+          nullable: true
+        digital_id_trust_score_rating:
+          type: string
+          description: Trust score rating for the digital ID (e.g., neutral, high).
+          nullable: true
+
+    Device:
+      type: object
+      description: Represents device information used in the fraud assessment.
+      nullable: true
+      properties:
+        device_id:
+          type: string
+          description: Unique identifier for the device.
+          nullable: true
+        device_first_seen:
+          type: string
+          description: Date when the device was first seen.
+          nullable: true
+        device_activities:
+          type: array
+          description: List of activities associated with the device.
+          items:
+            type: string
+          nullable: true
+        os:
+          type: string
+          description: Operating system of the device.
+          nullable: true
+        os_version:
+          type: string
+          description: Version of the operating system.
+          nullable: true
+        browser:
+          type: string
+          description: Browser used on the device.
+          nullable: true
+        browser_version:
+          type: string
+          description: Version of the browser.
+          nullable: true
+        agent_type:
+          type: string
+          description: Type of agent (e.g., browser_computer).
+          nullable: true
+        screen_res:
+          type: string
+          description: Screen resolution of the device.
+          nullable: true
+        timezone_name:
+          type: string
+          description: Timezone name of the device.
+          nullable: true
+
+    Network:
+      type: object
+      description: Represents network information used in the fraud assessment.
+      nullable: true
+      properties:
+        true_ip:
+          type: string
+          description: True IP address of the request.
+          nullable: true
+        true_ip_geo:
+          type: string
+          description: Geographical location code of the IP address (e.g., CH for Switzerland).
+          nullable: true
+        true_ip_region_iso_code:
+          type: string
+          description: ISO code for the region of the IP address.
+          nullable: true
+        true_ip_city:
+          type: string
+          description: City associated with the IP address.
+          nullable: true
+        true_ip_postal_code:
+          type: string
+          description: Postal code associated with the IP address.
+          nullable: true
+        true_ip_isp:
+          type: string
+          description: Internet Service Provider of the IP address.
+          nullable: true
+        true_ip_organization_type:
+          type: string
+          description: Type of organization associated with the IP address (e.g., Telecommunications).
+          nullable: true
+        browser_spoof_rating:
+          type: string
+          description: Rating indicating likelihood of browser spoofing (e.g., low, high).
+          nullable: true
+        vpn_rating:
+          type: string
+          description: Rating indicating likelihood of VPN usage (e.g., low, high).
+          nullable: true
+
+    CaseStatusResponse:
+      type: object
+      properties:
+        caseStatus:
+          $ref: '#/components/schemas/UbiIdStatus'
+        updatedPermissionCheck:
+          type: string
+          format: uuid
+        integrityChecks:
+          $ref: '#/components/schemas/IntegrityChecks'
+        integrityCheckResult:
+          $ref: "#/components/schemas/IntegrityChecksResult"
+
+    UbiIdNewCaseResponse:
+      type: object
+      properties:
+        ubiIdCaseId:
+          type: string
+          format: uuid
+          description: ubiId case id, created by ubiId
+        eIdAuthorization:
+          type: string
+          description: authorization token required to start a videoId on eId. value
+            only returned on post new identification. this information is used to
+            initialize the javascript in frontend
+        eIdEndpoint:
+          type: string
+          description: endpoint used for the eId integration
+          example: https://etrust-sandbox.electronicid.eu/v2/js/videoid.js
+          nullable: true
+        intrumEndpoint:
+          type: string
+          description: endpoint used for the intrum integration. Intrum identification ID followed after 
+            `identifications` path could be extracted from the endpoint to start identification.
+          example: https://go.test.online-ident.ch/customername/identifications/TST-ZQVJWE-VK/identification/start
+          nullable: true
+        ubiIdStatus:
+          $ref: '#/components/schemas/UbiIdStatus'
+        eIdIdType:
+          type: integer
+          description: calculated eId Identification type based on nationality and
+            type of document. this information is used to initialize the javascript
+            in frontend.
+        identId:
+          type: string
+          nullable: true
+          description: identification ID provided by IDnow system
+
+    ScheduleCaseRequest:
+      type: object
+      required:
+        - profileId
+        - language
+      properties:
+        profileId:
+          description: The numeric id of a pre-configured profile.
+          type: integer
+          example: 2
+        language:
+          $ref: '#/components/schemas/Language'
+        expirationTimestamp:
+          description: The datetime when this identification case is no longer resumable. The format of the expiration must be ISO-8601 format(`YYYYMMDD'T'HHMMSS`) and always in UTC time.
+          type: string
+          format: date-time
+          example: "2020-11-21T15:23:23"
+          nullable: true
+        extCaseId:
+          description: External Case Id can be set by the external application.
+          type: string
+          nullable: true
+        extApplication:
+          description: name of application ubiId service was called from
+          type: string
+          nullable: true
+        ubiIdCategory:
+          description: category of the identification case. can be used for filtering in ubiId Backoffice application.
+          type: string
+          nullable: true
+        identificationRedirectUrls:
+          $ref: '#/components/schemas/IdentificationRedirectUrls'
+        initialPersonData:
+          $ref: '#/components/schemas/UbiIdPerson'
+        termsAndConditionsAlreadyAccepted:
+          description: |
+            Option to skip legal step on identification flow.
+            Can only be `true` when attribute `allowExternalAcceptanceOfTermsAndConditions` in profile is enabled, otherwise `false`.
+          type: boolean
+        numOfDocuments:
+          description: >-
+            Number of documents to be processed or required. Must be a whole number between 1 and 500
+            (the platform's document limit per basket); a value with a fractional part (e.g. 2.5) or
+            outside that range is rejected. Falls back to the profile's default when omitted.
+            Required (here or as profile default) when the profile's identification provider is
+            `SIGN8_INTRUM` or `MAB_INTRUM`, because the count is sent to the provider when identification
+            starts.
+          type: integer
+          minimum: 1
+          maximum: 500
+          example: 5
+          nullable: true
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+          nullable: true
+        protectedCase:
+          description: Allow to enable/disable protecting case for tenants who enabled protected case feature.
+          type: boolean
+
+    ScheduleCaseResponse:
+      type: object
+      properties:
+        ubiIdCaseId:
+          type: string
+          format: uuid
+          description: ubiId case id, created by ubiId
+        ubiIdStatus:
+          $ref: '#/components/schemas/UbiIdStatus'
+        qtspstatus:
+          $ref: '#/components/schemas/RegistrationStatus'
+        expirationTimestamp:
+          description: The datetime when this identification Case is no longer resumable. The format of the expiration must be ISO-8601 format and always in UTC time.
+          type: string
+          format: date-time
+          example: "2020-11-21T15:23:23"
+        url:
+          description: The URL should be given to the End User to start the identity process on their browsers.
+          type: string
+          format: url
+          example:
+            https://autoid.id-validation.ch/scan/start?scheduled-case-id=925e28ef-188f-4913-86d8-103b7fd2c885&language=de
+
+    UbiIdPerson:
+      description: initial person data entered before starting identification process.
+      nullable: true
+      type: object
+      properties:
+        lastName:
+          type: string
+          nullable: true
+          example: Mustermann
+          description: Last name of person.
+        firstName:
+          type: string
+          nullable: true
+          example: Erika
+          description: First name of person.
+        birthdate:
+          type: string
+          nullable: true
+          format: date
+          description: The birthdate in 'yyyy-mm-dd' format.
+          example: "1998-12-18"
+        nationality:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        issuerCountry:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        eIdIdType:
+          type: integer
+          nullable: true
+          description: ID Type of eId based on nationality and identification Type. The mapping table to determine eIdIdType will be provided by ubiId.
+          example: 34
+        mobileCountryCode:
+          type: string
+          nullable: true
+          description: |
+            Country calling code (international subscriber dialing (ISD) code) of mobile phone number (might be used for TAN in case of signing), without leading "+" or leading 00.
+            It's required for the case which enabled protected case.
+          example: 41
+        mobilePhoneNumber:
+          type: string
+          nullable: true
+          description: |
+            Mobile phone number without country code and leading 0 (might be used for TAN in case of signing).
+            It's required for the case which enabled protected case.
+          example: 791234567
+        extPersonId:
+          description: Person Id of external application.
+          type: string
+          nullable: true
+        externalUserId:
+          description: external user id is used when using `EXTUSERID` in Sign8 template with Sign8 service.
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          description: Email of person
+          example: erika@mail.com
+          nullable: true
+        street:
+          type: string
+          description: Street
+          example: 'St Gallerstrasse'
+          nullable: true
+        houseNumber:
+          type: string
+          description: House Number
+          example: '59'
+          nullable: true
+        town:
+          type: string
+          description: Town
+          example: Wittenbach
+          nullable: true
+        zipCode:
+          type: string
+          description: Zip Code
+          example: '9300'
+          nullable: true
+        extIpAddress:
+          type: string
+          description: IP address of user when creating the case.
+          example: '192.168.1.1'
+          nullable: true
+
+    UbiIdStatus:
+      type: string
+      description: |
+        * `INITIALIZED` - UMB_ID Case is created but not started on eId
+        * `TIMEOUT` - session of a UMB_ID Case is time out
+        * `IDENTIFICATION_SUCCESSFUL` - result of identification was successful
+        * `IDENTIFICATION_FAILED` - identification failed
+        * `VERIFICATION_PENDING`- the verification process is pending
+        * `VERIFICATION_CONFIRMED` - Verification process successfully finished
+        * `VERIFICATION_REJECTED` - Verification has been rejected
+        * `DOWNLOADED` - zip file of a identification case with previous status VERIFICATION_CONFIRMED is downloaded
+        * `DOWNLOAD_FAILED` - zip file of a identification case with previous status VERIFICATION_CONFIRMED is download failed
+        * `DELETED` - person data and data deleted and deletion triggered on eId side 
+        * `DELETED_MARKED` - deletion triggered in UMB_ID application. will be deleted x days after action was triggered.
+        * `DELETED_TEMPORARY` - x days after a document was downloaded by the API the document basket is marked as temporary deleted.
+        * `IDENTIFICATION_NOT_REQUIRED` - UMB_ID case is either identified by UMB_ID or has valid identification evidence by a qTSP provider.
+        * `SCHEDULED` - Status of UMB_ID scheduled case.
+        * `CORRUPTED` - UMB_ID case has corrupted files, it is no longer valid to be used.
+      enum:
+        - INITIALIZED
+        - TIMEOUT
+        - IDENTIFICATION_SUCCESSFUL
+        - IDENTIFICATION_FAILED
+        - VERIFICATION_PENDING
+        - VERIFICATION_CONFIRMED
+        - VERIFICATION_REJECTED
+        - DOWNLOADED
+        - DOWNLOAD_FAILED
+        - DELETED
+        - DELETED_MARKED
+        - DELETED_TEMPORARY
+        - IDENTIFICATION_NOT_REQUIRED
+        - SCHEDULED
+        - CORRUPTED
+
+    RegistrationStatus:
+     type: string
+     enum: 
+     - NO_REGISTRATION
+     - REGISTRATION_OUTSTANDING
+     - REGISTRATION_INITIALIZED
+     - REGISTRATION_COMPLETED
+     - REGISTRATION_FAILED
+     - EVIDENCE_VALID
+     description: |
+      * `NO_REGISTRATION` - status in case no verification by a RA-Agent is required (always the case for UMB_ID)
+      * `REGISTRATION_OUTSTANDING` - verification of identification required after identification was done by enduser
+      * `REGISTRATION_INITIALIZED` - verification is initialized and assigned to a RA-Authority
+      * `REGISTRATION_COMPLETED` - verification confirmed by a RA-Agent
+      * `REGISTRATION_FAILED` - verification rejected by a RA-Agent
+      * `EVIDENCE_VALID` - there is valid evidence provided by qTSP provider.
+    EidFeatureList:
+      description: "full list of feature. which features are available depends on the eidtype and as well on the configuration."
+      type: object
+      nullable: true
+      additionalProperties: true
+    EidSecurityCheckList:
+      description: full list of security checks. which security checks are available depends on the eidtype and as well on the configuration.
+      type: object
+      nullable: true
+      additionalProperties: true
+    EidRequest:
+      type: object
+      nullable: true
+      properties:
+        date:
+          type: string
+          pattern: '^\d+$'
+          nullable: true
+          description: date when videoId was started
+          example: "1585833244000"
+    IdentificationCompletion:
+      type: object
+      nullable: true
+      properties:
+        date:
+          type: string
+          pattern: '^\d+$'
+          nullable: true
+          description: date when videoId process was finished
+          example: "1585908623000"
+    IdentificationDocument:
+      type: object
+      nullable: true
+      description: information extracted from document
+      properties:
+        classification:
+          type: string
+          nullable: true
+          description: classification of document
+          example: che_id_2003
+        type:
+          type: string
+          nullable: true
+          description: Type of document, code from eId
+          example: TD1
+        issuer:
+          type: string
+          nullable: true
+          description: country of issuer (iso code) for EID
+          example: CHE
+        issuingDate:
+          type: string
+          nullable: true
+          description: The issuing date in 'yyyy-MM-dd' format.
+          format: date
+        expiryDate:
+          type: string
+          nullable: true
+          description: The expiry date in 'yyyy-MM-dd' format.
+          format: date
+        documentNumber:
+          type: string
+          nullable: true
+          description: number of document
+          example: X1234563
+        primaryName:
+          type: string
+          nullable: true
+          description: first name
+          example: Peter Fritz
+        secondaryName:
+          type: string
+          nullable: true
+          description: lastname
+          example: Meier
+        birthdate:
+          type: string
+          nullable: true
+          description: The birthdate in 'yyyy-MM-dd' format.
+          format: date
+        birthplace:
+          type: string
+          nullable: true
+          description: Birthplace as stated on document.
+          deprecated: true
+        sex:
+          type: string
+          nullable: true
+          description: Gender value. Possible value (Intrum MALE/FEMALE | Signicat M/F)
+          example: MALE
+        nationality:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        personalNumber:
+          type: string
+          nullable: true
+          description: personal number is only available on some documents.
+        issuerCountry:
+          $ref: '#/components/schemas/GetCaseDetailedAlpha3CountryCode'
+        issuedby:
+          type: string
+          nullable: true
+          example: CITYLONDON, LONDON
+        driverlicenses:
+          type: array
+          nullable: true
+          items:
+           $ref: '#/components/schemas/DriverLicense'
+        entryDate:
+          type: string
+          nullable: true
+          description: The entryDate in 'yyyy-MM-dd' format.
+          format: date
+        residencePermitType:
+          type: string
+          nullable: true
+          description: Type of residence permit when scanning.
+        wasnfcused:
+          type: boolean
+          nullable: true
+          description: |
+           * `true` : If NFC could be scanned successfully.
+           * `false`: If any non-NFC document is scanned, or the NFC scan fails, a visual scan of the document is performed as a fallback.
+        # Swiss EID specific verifiedClaims mapped fields
+        additionalPersonInfo:
+          type: string
+          nullable: true
+          description: Additional person info as provided by Swiss EID.
+        ageBirthYear:
+          type: string
+          nullable: true
+          description: Age in years or birth year depending on Swiss EID response context.
+        birthPlace:
+          type: string
+          nullable: true
+          description: Birthplace as provided by Swiss EID (camelCase field).
+        cnf:
+          $ref: '#/components/schemas/Cnf'
+        issuingAuthority:
+          type: string
+          nullable: true
+          description: Issuing authority as provided by document or Swiss EID.
+        placeOfOrigin:
+          type: string
+          nullable: true
+          description: Place of origin as provided by Swiss EID.
+        referenceIdExpiryDate:
+          type: string
+          nullable: true
+          description: The reference ID expiry date in 'yyyy-MM-dd' format.
+          format: date
+        referenceIdType:
+          type: string
+          nullable: true
+          description: Type of the reference ID as provided by Swiss EID.
+        status:
+          $ref: '#/components/schemas/Status'
+        vct:
+          type: string
+          nullable: true
+          description: Verifiable credential type identifier (vct).
+        vctMetadataUri:
+          type: string
+          nullable: true
+          description: URI to VCT metadata.
+        vctMetadataUriIntegrity:
+          type: string
+          nullable: true
+          description: Integrity value (e.g., hash) for VCT metadata.
+        verificationOrganization:
+          type: string
+          nullable: true
+          description: Organization that performed verification.
+        verificationType:
+          type: string
+          nullable: true
+          description: Type of verification that was performed.
+
+    VerificationData:
+      type: object
+      nullable: true
+      description: information from verification process. this object is only available for UMB_ID case when the verification already took place.
+      properties:
+        verificationDate:
+          type: string
+          pattern: '^\d+$'
+          nullable: true
+          description: timestamp the verification took place
+        verifierId:
+          type: string
+          nullable: true
+          description: id of verifier (UUID)
+        verificationStatus:
+          type: string
+          nullable: true
+          description: status of verification
+        verificationDocument:
+          $ref: '#/components/schemas/VerificationDocument'
+        rejection:
+          $ref: '#/components/schemas/VerificationRejectionResponse'
+        verificationQuestions:
+          $ref: '#/components/schemas/VerificationResponse'
+        additionalDocuments:
+          $ref: '#/components/schemas/AdditionalDocumentsResponse'
+    VerificationResponse:
+      description: List of all verification questions used in the verification process.
+      type: object
+      nullable: true
+      properties:
+        reasons:
+          $ref: '#/components/schemas/Reasons'
+    
+    AdditionalDocumentsResponse:
+      description: List of additional documents used with Intrum.
+      type: array
+      items:
+        $ref: "#/components/schemas/AdditionalDocumentResponseDetail"
+
+    AutoIdDataAdditionalDocumentsResponse:
+      description: List of additional documents used with Intrum.
+      type: array
+      items:
+        type: object
+        properties:
+          type:
+            $ref: "#/components/schemas/IntrumAdditionalDocumentType"
+          imageQuality:
+            type: string
+            example: n/a
+            description: imageQuality is not evaluated automatically and will only be set after manual review (see verificationData).
+          subType:
+            type: string
+            description: |  
+                  * `n/a` - if according field of Intrum has not value or is not available  
+                  * Omitted in response when `additionalDocumentType` is SIGNATURE  
+                  
+                  subType is not extracted automatically and will only be set after manual review (see verificationData).
+            example: n/a
+          issuingDate:
+            description: |
+              issuing date of additional document.
+              *Note*:
+                - The field will be deprecated and replaced by entryDate.
+                - Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+            type: string
+            format: date
+            nullable: true
+          entryDate:
+            type: string
+            description: | 
+              entry date of additional document
+              entryDate is not extracted automatically and will only be set after manual review (see verificationData).
+            format: date
+            nullable: true
+          expiryDate:
+            description: |
+              expiry date of additional document.
+              *Note*: Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+            type: string
+            format: date
+            nullable: true
+          firstName:
+            description: |
+              First name of additional document.
+              *Note*: Omitted in response if not available.
+            type: string
+            nullable: true
+          lastName:
+            description: |
+              Last name of additional document.
+              *Note*: Omitted in response if not available.
+            type: string
+            nullable: true
+          birthdate:
+            description: |
+              Birthdate of additional document.
+              *Note*: Omitted in response if not available.
+            type: string
+            format: date
+            nullable: true
+          documentNumber:
+            description: |
+              Document number of additional document.
+              *Note*: Omitted in response if not available.
+            type: string
+            nullable: true
+          issuerCountry:
+            description: |
+              Issuer country of additional document.
+              *Note*: Omitted in response if not available.
+            type: string
+            nullable: true
+          issuedBy:
+            description: |
+              Name of issuer of additional document.
+              *Note*: Omitted in response if not available.
+            type: string
+            nullable: true
+          status:
+            type: string
+            example: n/a
+            description: status is not evaluated automatically and will only be set after manual review (see verificationData).
+
+    AdditionalDocumentResponseDetail:
+      allOf:
+        - $ref: "#/components/schemas/AdditionalDocument"
+        - type: object
+          nullable: true
+          properties:
+            status:
+              $ref: "#/components/schemas/IntrumAdditionalDocumentStatus"
+
+    AdditionalDocument:
+      type: object
+      nullable: true
+      properties:
+        type:
+          $ref: "#/components/schemas/IntrumAdditionalDocumentType"
+        imageQuality:
+          description: |
+           Image quality of additional document.
+           *Note*: Omitted in response if not available.
+          $ref: "#/components/schemas/IntrumAdditionalDocumentStatus"
+          nullable: true
+        subType:
+          $ref: "#/components/schemas/IntrumAdditionalDocumentSubType"
+        issuingDate:
+          description: |
+            issuing date of additional document.
+            *Note*:
+              - The field will be deprecated and replaced by entryDate.
+              - Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+          type: string
+          format: date
+          nullable: true
+        entryDate:
+          description: |
+           entry date of additional document.
+           *Note*: Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+          type: string
+          format: date
+          nullable: true
+        expiryDate:
+          description: |
+            expiry date of additional document.
+            *Note*: Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+          type: string
+          format: date
+          nullable: true
+        firstName:
+          description: |
+           First name of additional document.
+           *Note*: Omitted in response if not available.
+          type: string
+          nullable: true
+        lastName:
+          description: |
+           Last name of additional document.
+           *Note*: Omitted in response if not available.
+          type: string
+          nullable: true
+        birthdate:
+          description: |
+           Birthdate of additional document.
+           *Note*: Omitted in response if not available.
+          type: string
+          format: date
+          nullable: true
+        documentNumber:
+          description: |
+           Document number of additional document.
+           *Note*: Omitted in response if not available.
+          type: string
+          nullable: true
+        issuerCountry:
+          description: |
+           Issuer country of additional document.
+           *Note*: Omitted in response if not available.
+          type: string
+          nullable: true
+        issuedBy:
+          description: |
+           Name of issuer of additional document.
+           *Note*: Omitted in response if not available.
+          type: string
+          nullable: true
+
+    Reasons:
+      type: array
+      nullable: true
+      items:
+        $ref: "#/components/schemas/Reason"
+    Reason:
+      type: object
+      nullable: true
+      properties:
+        type:
+          type: string
+          example: "Custom.Question"
+        message:
+          type: string
+          example: "This is the answer of the 8th (custom) question on eID platform."
+    VerificationRejectionResponse:
+      description: Verification questions that caused rejection. Is null for all other status than `VERIFICATION_REJECTED`.
+      type: object
+      nullable: true
+      properties:
+        reasons:
+          $ref: '#/components/schemas/Reasons'
+    VerificationDocument:
+      type: object
+      nullable: true
+      description: verified data by RA-Agent
+      properties:
+        classification:
+          type: string
+          nullable: true
+          description: classification of document
+          example: IDCARD
+        primaryName:
+          type: string
+          nullable: true
+          description: If the case status is `VERIFICATION_REJECTED`, firstname can be null.
+          example: Peter Fritz
+        secondaryName:
+          type: string
+          nullable: true
+          description: If the case status is `VERIFICATION_REJECTED`, lastname can be null.
+          example: Meier
+        documentNumber:
+          type: string
+          nullable: true
+          description: If the case status is `VERIFICATION_REJECTED`, the number of document can be null.
+          example: X1234563
+        birthdate:
+          type: string
+          nullable: true
+          description: The birthdate with `yyyy-MM-dd` format. If case status is `VERIFICATION_REJECTED`, the birthdate can be null.
+          format: date
+        issuingDate:
+          type: string
+          nullable: true
+          description: The issuing date in 'yyyy-MM-dd' format.
+          format: date
+        expiryDate:
+          type: string
+          nullable: true
+          description: The expiry date with `yyyy-MM-dd` format.
+          format: date
+        nationality:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        issuer:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        sex:
+          type: string
+          nullable: true
+          description: Gender value. Possible value (Intrum MALE/FEMALE | Signicat M/F). If the case status is `VERIFICATION_REJECTED`, sex can be null.
+          example: MALE
+        birthplace:
+          type: string
+          nullable: true
+          description: Birthplace as stated on document.
+        issuedby:
+          type: string
+          nullable: true
+        entryDate:
+          type: string
+          nullable: true
+          description: The entryDate in 'yyyy-MM-dd' format.
+          format: date
+        residencePermitType:
+          type: string
+          nullable: true
+          description: Type of residence permit when scanning.
+          
+    IdentificationData:
+      type: object
+      nullable: true
+      description: data from eId or IDnow case
+      properties:
+        request:
+          allOf:
+            - $ref: '#/components/schemas/EidRequest'
+          nullable: true
+        completion:
+          $ref: '#/components/schemas/IdentificationCompletion'
+        identificationDocument:
+          $ref: '#/components/schemas/IdentificationDocument'
+        biometrics:
+          type: object
+          nullable: true
+          properties:
+            similarityLevel:
+              type: string
+              nullable: true
+              description: similarity level compared with the picture on the document
+              example: High
+        features:
+          allOf:
+            - $ref: '#/components/schemas/EidFeatureList'
+          nullable: true
+        securityChecks:
+          allOf:
+            - $ref: '#/components/schemas/EidSecurityCheckList'
+          nullable: true
+        additionalDocuments:
+          $ref: '#/components/schemas/AutoIdDataAdditionalDocumentsResponse'
+        identIpAddress:
+          type: string
+          nullable: true
+          description: IP address captured when the user visits the scan ID page.
+          example: "203.0.113.42"
+        identIpSourcePort:
+          type: string
+          nullable: true
+          description: Source port associated with the identIpAddress.
+          example: "54321"
+        identIpTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the identIpAddress was recorded.
+          example: "2026-04-16T15:23:23Z"
+        channelChooserIpAddress:
+          type: string
+          nullable: true
+          description: IP address captured when the user visits the channel chooser page.
+          example: "198.51.100.24"
+        channelChooserSourcePort:
+          type: string
+          nullable: true
+          description: Source port associated with the channelChooserIpAddress.
+          example: "51234"
+        channelChooserTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the channelChooserIpAddress was recorded.
+          example: "2026-04-16T15:30:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+    JwtAccessToken:
+      type: string
+      description: |
+        JWT Token
+
+        The following specifies the details of the JWT Token:
+
+        ### headers
+
+        - `alg`: "HS512"
+        - `typ`: "JWT"
+
+        ### claims
+        - `jti`: JWT Token ID (UUID)
+        - `tenantId`: The Tenant ID
+        - `apiToken`: `true` if this token is reserved for Integration API.
+        - `iss`: ubiid.ch
+        - `exp`: expiration
+        - `scopes`: []
+    Language:
+     type: string
+     enum: 
+     - DE
+     - FR
+     - IT
+     - EN
+     description: |
+      * `DE` - German
+      * `FR` - France
+      * `IT` - Italian
+      * `EN` - English
+
+    IntegrityChecksResult:
+      type: object
+      nullable: true
+      description: The integrity check result includes the information if the integrity check was passed. Null if check was not active.
+      properties:
+        age:
+          type: boolean
+          nullable: true
+          description: true if the extracted age was within defined minimum and maximum age. If age check was not active, the parameter is not included in the response body.
+        documentExpiry:
+          allOf:
+            - $ref: '#/components/schemas/DocumentExpiryCheckResult'
+          nullable: true
+        birthdate:
+          type: boolean
+          nullable: true
+          description: true if the extracted birthdate matches with the entered birthdate by the end-user. If birthdate check was not active, the parameter is not included in the response body.
+        name:
+          type: boolean
+          nullable: true
+          description: true if the extracted name matches with the entered name by the end-user. If name check was not active, the parameter is not included in the response body.
+        enhancedName:
+          $ref: '#/components/schemas/EnhancedName'
+
+    DocumentExpiryCheckResult:
+      type: object
+      nullable: true
+      description: true if the document is not expired according to the extracted document expiry date and the offset defined in the profile. If documentExpiry check was not active, the parameter is not included in the response body.
+      properties:
+        isValid:
+          type: boolean
+        validDate:
+          type: string
+          format: date
+          example: "2020-10-07"
+        expiredDate:
+          type: string
+          format: date
+          example: "2022-10-07"
+
+    EnhancedName:
+      type: object
+      properties:
+        firstNameFullCompare:
+          type: integer
+          format: int32
+          example: 86
+          nullable: true
+        lastNameFullCompare:
+          type: integer
+          format: int32
+          example: 92
+          nullable: true
+        firstNameBestSingleString:
+          type: integer
+          format: int32
+          example: 77
+          nullable: true
+        lastNameBestSingleString:
+          type: integer
+          format: int32
+          example: 99
+          nullable: true
+    IdentificationCaseCompleteRequest:
+      description: |
+        Represents the data used for updating a UMB_ID Case once the VideoID process completes.
+
+        The API will update the ubi Case status depending on the data provided by the callback request.
+      type: object
+      properties:
+        videoId:
+          type: string
+          description: The videoID given by eID
+        error:
+          type: string
+          description: The error object in JSON format.
+
+    IdentificationCaseCompleteResponse:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/UbiIdStatus'
+        integrityChecks:
+          $ref: '#/components/schemas/IntegrityChecks'
+        integrityCheckResult:
+          $ref: "#/components/schemas/IntegrityChecksResult"
+
+    IntegrityChecks:
+      type: object
+      required:
+        - name
+        - age
+        - birthdate
+        - documentExpiry
+      description: Integrity checks configuration
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        age:
+          $ref: '#/components/schemas/Age'
+        birthdate:
+          $ref: '#/components/schemas/Birthdate'
+        documentExpiry:
+          $ref: '#/components/schemas/DocumentExpiry'
+
+    Name:
+      type: object
+      required:
+        - scope
+        - tolerance
+        - allowCorrect
+        - run
+        - mandatory
+        - requireEidVerification
+        - allowRetryAfterCheck
+      properties:
+        scope:
+          $ref: '#/components/schemas/NameCheckScope'
+        tolerance:
+          type: integer
+        allowCorrect:
+          type: boolean
+        run:
+          type: boolean
+        mandatory:
+          type: boolean
+        requireEidVerification:
+          type: boolean
+        allowRetryAfterCheck:
+          type: boolean
+
+    Age:
+      type: object
+      required:
+        - min
+        - max
+        - run
+        - mandatory
+        - requireEidVerification
+        - allowRetryAfterCheck
+      properties:
+        min:
+          type: integer
+        max:
+          type: integer
+        run:
+          type: boolean
+        mandatory:
+          type: boolean
+        requireEidVerification:
+          type: boolean
+        allowRetryAfterCheck:
+          type: boolean
+
+    Birthdate:
+      type: object
+      required:
+        - allowCorrect
+        - run
+        - mandatory
+        - requireEidVerification
+        - allowRetryAfterCheck
+      properties:
+        allowCorrect:
+          type: boolean
+        run:
+          type: boolean
+        mandatory:
+          type: boolean
+        requireEidVerification:
+          type: boolean
+        allowRetryAfterCheck:
+          type: boolean
+
+    DocumentExpiry:
+      type: object
+      required:
+        - offsets
+        - run
+        - mandatory
+        - requireEidVerification
+        - allowRetryAfterCheck
+      properties:
+        offsets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentOffset'
+        run:
+          type: boolean
+        mandatory:
+          type: boolean
+        requireEidVerification:
+          type: boolean
+        allowRetryAfterCheck:
+          type: boolean
+
+    NameCheckScope:
+      type: string
+      description: |
+        * `FULL` - Check perfect match in name between input and scanning data
+        * `PARTIAL` - Check partial match in name between input and scanning data
+        * `ENHANCED` - Check perfect match in name between input and scanning data. Additionally, include matching score in the result.
+      enum:
+        - FULL
+        - PARTIAL
+
+    DocumentOffset:
+      type: object
+      properties:
+        idType:
+          type: integer
+        offsetDays:
+          type: integer
+          
+    UbiIdUpdateCaseRequest:
+      type: object
+      properties:
+        eIdIdType:
+          type: integer
+          nullable: true
+        issuerCountry:
+          type: string
+    DriverLicense:
+      type: object
+      properties:
+        additionalInformation:
+          type: string
+        licenseClass:
+          type: string
+        validFromReadout:
+          type: string
+        validUntilReadout:
+          type: string
+        validUntil:
+          type: string
+          format: date
+        validFrom:
+          type: string
+          format: date
+
+    IdCaseDocumentType:
+      type: string
+      description: |
+        Identification case document types
+        * `id-copy` - ID copy of identification case
+      enum:
+        - id-copy
+
+    UbiIdRevokeCaseRequest:
+      type: object
+      properties:
+        expirationTimestamp:
+          description: The expiration date time of case, if this field is not provided in the request the default expiration time will be assigned to now(UTC). The format of the expiration must be ISO-8601 format(`yyyy-MM-dd'T'HH:mm:ss`) and always in UTC time.
+          type: string
+          format: date-time
+          example: "2023-10-22T15:23:23"
+
+    UbiIdStatusReason:
+      type: string
+      enum:
+      - PROCESSING
+      - MANDATORY_BASIC_CHECK_FAILED
+      - ABORTED
+      - REVIEW_PENDING
+      - CHECK_PENDING
+      - FRAUD_SUSPICION_PENDING
+      - SUCCESS
+      - SUCCESS_DATA_CHANGED
+      - CANCELED
+      - FRAUD_SUSPICION_CONFIRMED
+      - SIGNING_ABORTED
+      - InactiveUser.Aborted
+      - Authorization.Reused
+      - Recording.Error
+      - VideoID.Error
+      - User.Aborted
+      - Luminance.TooLow
+      - Camera.NotFound
+      - Https.Required
+      - Document.Illegible
+      - Connection.Lost
+      - Connection.Error
+      - IdType.Unauthorized
+      - MicrophonePermission.Denied
+      - FaceSpoofing.Detected
+      - Captcha.Invalid
+      - Document.NotAllowed
+      - Liveness.NotDetected
+      - Document.Tampered
+      - RTCConnection.Lost
+      - Camera.Unavailable
+      - CameraPermission.Denied
+      - FacesMismatch.Detected
+      - Bandwidth.TooLow
+      - VideoID.VersionNotSupported
+      - MaxLength.Exceeded
+      - Image.Blurred
+      - BWCopy.Detected
+      - Document.WrongSide
+      - CameraResolution.TooLow
+      - Connection.Unstable
+      - IdType.Invalid
+      - CameraRequirements.NotSatisfied
+      - Document.Rotated
+      description: |
+        * `PROCESSING` - Scan successfully but get ident from Intrum fail
+        * `MANDATORY_BASIC_CHECK_FAILED` - Scan successfully but integrity check failed
+        * `ABORTED` - User aborted
+        * `REVIEW_PENDING` - The verification process is pending
+        * `CHECK_PENDING` - The verification process is pending
+        * `FRAUD_SUSPICION_PENDING` - The verification process is pending
+        * `SUCCESS` - Verification process successfully finished
+        * `SUCCESS_DATA_CHANGED` - Verification process successfully finished
+        * `CANCELED` - Verification process failed
+        * `FRAUD_SUSPICION_CONFIRMED` - Verification process failed
+        * `SIGNING_ABORTED` - User stops signing process to reset password
+        * `InactiveUser.Aborted` - User is inactive and aborts the identification process
+        * `Authorization.Reused` - User tries to reuse the authorization URL
+        * `Recording.Error` - An error occurs during recording the video
+        * `VideoID.Error` - An error occurs during video identification
+        * `User.Aborted` - User aborts the identification process
+        * `Luminance.TooLow` - The luminance of the video is too low
+        * `Camera.NotFound` - No camera is found on the device
+        * `Https.Required` - The identification process requires HTTPS connection
+        * `Document.Illegible` - The document is illegible
+        * `Connection.Lost` - The connection is lost during the identification process
+        * `Connection.Error` - An error occurs during the connection in the identification process
+        * `IdType.Unauthorized` - The type of the document is not allowed for the identification process
+        * `MicrophonePermission.Denied` - The user denies the permission of using microphone
+        * `FaceSpoofing.Detected` - Face spoofing is detected during the identification process
+        * `Captcha.Invalid` - The captcha is invalid
+        * `Document.NotAllowed` - The document is not allowed for the identification process
+        * `Liveness.NotDetected` - The liveness is not detected during the identification process
+        * `Document.Tampered` - The document is tampered during the identification process
+        * `RTCConnection.Lost` - The RTC connection is lost during the identification process
+        * `Camera.Unavailable` - The camera is unavailable during the identification process
+        * `CameraPermission.Denied` - The user denies the permission of using camera
+        * `FacesMismatch.Detected` - The faces mismatch is detected during the identification process
+        * `Bandwidth.TooLow` - The bandwidth is too low during the identification process
+        * `VideoID.VersionNotSupported` - The version of video identification is not supported
+        * `MaxLength.Exceeded` - The length of video exceeds the maximum limit during the identification process
+        * `Image.Blurred` - The image is blurred during the identification process
+        * `BWCopy.Detected` - The black and white copy of document is detected during the identification process
+        * `Document.WrongSide` - The wrong side of document is scanned during the identification process
+        * `CameraResolution.TooLow` - The camera resolution is too low during the identification process
+        * `Connection.Unstable` - The connection is unstable during the identification process
+        * `IdType.Invalid` - The type of the document is invalid for the identification process
+        * `CameraRequirements.NotSatisfied` - The camera requirements are not satisfied for the identification process
+        * `Document.Rotated` - The document is rotated during the identification process
+
+    IntrumAdditionalDocumentStatus:
+     type: string
+     enum:
+     - OK
+     - NOK
+     - n/a
+     description: |
+      * `OK` - if according field of Intrum has value OK
+      * `NOK` - if according field of Intrum has value NOK
+      * `n/a` - if according field of Intrum has not value or is not available
+
+    IntrumAdditionalDocumentSubType:
+     type: string
+     enum:
+     - B
+     - C
+     - Ci
+     - F
+     - G
+     - L
+     - N
+     - S
+     - n/a
+     description: |
+      * `B` - if according field of Intrum has value B
+      * `C` - if according field of Intrum has value C
+      * `Ci` - if according field of Intrum has value Ci
+      * `F` - if according field of Intrum has value F
+      * `G` - if according field of Intrum has value G
+      * `L` - if according field of Intrum has value L
+      * `N` - if according field of Intrum has value N
+      * `S` - if according field of Intrum has value S
+      * `n/a` - if according field of Intrum has not value or is not available
+      * Omitted in response when `additionalDocumentType` is SIGNATURE
+    IntrumAdditionalDocumentType:
+     type: string
+     example: RESIDENCE_PERMIT
+     enum:
+     - NONE
+     - RESIDENCE_PERMIT
+     - SIGNATURE
+     - PERSON_WITH_ID_RESIDENCE_PERMIT
+     - PERSON_WITH_ID_SIGNATURE
+     - PERSON_WITH_ID
+     description: |
+      * `NONE` - default value for additional document type
+      * `RESIDENCE_PERMIT` - Residence permit
+      * `SIGNATURE` - Signature
+      * `PERSON_WITH_ID_RESIDENCE_PERMIT` - Person with ID residence permit
+      * `PERSON_WITH_ID_SIGNATURE` - Person with ID signature
+      * `PERSON_WITH_ID` - Person with ID
+
+    IdentificationRedirectUrls:
+      type: object
+      nullable: true
+      properties:
+        success:
+          $ref: "#/components/schemas/Url"
+        verificationRejected:
+          $ref: "#/components/schemas/Url"
+        failed:
+          $ref: "#/components/schemas/Url"
+        timeout:
+          $ref: "#/components/schemas/Url"
+
+    Url:
+      type: string
+      format: url
+      maxLength: 1024
+      description: |
+        The customize URL in the request is required when redirect feature is enabled and default value is not available.
+        The format of provided URL must follow the RFC-3986 standard.
+        Below parameters must not be included in the URL if it is configured to be added by m_IDeal application.
+        * `ubiIdCaseId`
+        * `extCaseId`
+        * `extPersonId`
+        * `extApplication`
+        * `ubiIdCategory`
+      nullable: true
+      example: "https://redirecturl.com?any_thing=abcXYZ"
+
+    Alpha3CountryCode:
+      nullable: true
+      type: string
+      description: |
+        Country code (ISO 3166-1, Alpha-3 code).
+        Note: For Kosovo, its Apha-3 code country abbreviation is 'XXK'
+      example: CHE
+
+    GetCaseDetailedAlpha3CountryCode:
+      nullable: true
+      type: string
+      description: |
+        Country code (ISO 3166-1, Alpha-3 code) for Intrum.
+        Note: For Kosovo, its Apha-3 code country abbreviation is 'XXK'
+      example: CHE
+
+    EvidenceImportStatus: 
+      type: string
+      example: OUTSTANDING
+      enum:
+      - OUTSTANDING
+      - FAILED
+      - SUCCESS
+      description: |
+        * `OUTSTANDING` - initial status when first create scheduled case or document basket
+        * `FAILED` - Evidence import failed
+        * `SUCCESS` - Evidence is imported successfully
+
+    Base64EncodedFile:
+      type: object
+      description: |
+        File response with content encoded in base64 and its fileExtension
+      properties:
+        fileContent:
+          type: string
+          format: byte
+        fileExtension:
+          type: string
+          description: The file extension format will be pdf or zip
+          example: "zip"
+
+    DataCheckDetail:
+      type: object
+      properties:
+        dataCheckId:
+          type: integer
+        dataCheckApi:
+          type: string
+        dataCheckName:
+          type: string
+        dataCheckStatus:
+          type: string
+        runOnCaseStatus:
+          type: string
+        dataCheckSource:
+          type: object
+          description: the name sent in requestParameters of runDataCheck setting
+          properties:
+            terms:
+              type: string
+            firstName:
+              type: string
+              description: First name
+            lastName:
+              type: string
+              description: Last name
+            birthdate:
+              type: string
+              description: Birthdate
+            street:
+              type: string
+              description: Street
+            houseNumber:
+              type: string
+              description: House number
+            town:
+              type: string
+              description: Town
+            zipCode:
+              type: string
+              description: Zip Code
+            phone:
+              type: string
+              description: Phone number
+            email:
+              type: string
+              description: Email address
+            ipAddress:
+              type: string
+              description: IP address
+        dataCheckRequest:
+          type: object
+          description: full request sent to Intrum
+          properties:
+            terms:
+              type: string
+            accuracy:
+              type: integer
+            max_hits_per_list:
+              type: integer
+            lists:
+              type: string
+            requestId:
+              type: string
+        dataCheckResult:
+          $ref: "#/components/schemas/DataCheckResult"
+
+    DataCheckResult:
+      type: object
+      properties:
+        status:
+          type: string
+        error:
+          type: string
+          nullable: true
+        totalCount:
+          nullable: true
+          type: integer
+        hits:
+          $ref: "#/components/schemas/Hits"
+        entries:
+          nullable: true
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/EntryValue"
+        addressData:
+          $ref: "#/components/schemas/AddressData"
+        bankruptcyData:
+          $ref: "#/components/schemas/BankruptcyData"
+        blacklistData:
+          $ref: "#/components/schemas/BlacklistData"
+        collectionData:
+          $ref: "#/components/schemas/CollectionData"
+        creditData:
+          $ref: "#/components/schemas/CreditData"
+        eCommerceData:
+          $ref: "#/components/schemas/ECommerceData"
+        fraudData:
+          $ref: "#/components/schemas/FraudData"
+        generalData:
+          $ref: "#/components/schemas/GeneralData"
+        managerData:
+          $ref: "#/components/schemas/ManagerData"
+        pursuitData:
+          $ref: "#/components/schemas/PursuitData"
+        reportData:
+          $ref: "#/components/schemas/ReportData"
+        check:
+          type: integer
+          example: 1
+          description: Indicator if person is registered or not (see 4.1.3)
+          nullable: true
+        requestId:
+          type: string
+          example: ea non
+          description: Request ID (the one sent in the request)
+          nullable: true
+        responseId:
+          type: integer
+          example: 1
+          description: Unique Response ID
+          nullable: true
+        checkId:
+          type: integer
+          example: 441
+          description: The ID of the check assigned by the system.
+          nullable: true
+        checkTime:
+          type: number
+          example: 1747223518783
+          description: 'The time of the check measured in milliseconds since midnight, January 1, 1970 UTC.'
+          nullable: true
+        customerId:
+          type: integer
+          example: 71
+          description: The ID of the customer.
+          nullable: true
+        customerReference:
+          type: string
+          example: '37907210'
+          description: The reference of the customer.
+          nullable: true
+        customerVersionId:
+          type: integer
+          example: 102
+          description: The version ID of the customer. It is the ID of the version that has been checked.
+          nullable: true
+        riskState:
+          type: string
+          example: 'POSSIBLE_RISKS_FOUND'
+          description: 'The risk state of the check: "NO_RISKS_FOUND" or "POSSIBLE_RISKS_FOUND".'
+          nullable: true
+
+
+    Hits:
+      nullable: true
+      type: object
+      properties:
+        PEP:
+          type: integer
+        SL:
+          type: integer
+        WLBL:
+          type: integer
+
+    EntryValue:
+      type: array
+      items:
+        $ref: "#/components/schemas/ComplianceMap"
+
+    ComplianceMap:
+      type: object
+      additionalProperties:
+        $ref: "#/components/schemas/ComplianceList"
+
+    ComplianceList:
+      type: object
+      properties:
+        ID:
+          type: string
+        Country:
+          type: string
+          nullable: true
+        First_Name:
+          type: string
+        Last_Name:
+          type: string
+        Full_Name:
+          type: string
+        DOB:
+          type: string
+        Name_of_the_List:
+          type: string
+          nullable: true
+
+    AddressData:
+      type: object
+      description: Address data related information
+      properties:
+        formerAddresses:
+          type: array
+          description: Former address related information
+          items:
+            type: object
+            properties:
+              aadsCode:
+                type: integer
+                example: 32
+                description: Address status code (see 4.3.16 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+              aadsDate:
+                type: string
+                example: 2019-02-19
+                description: Address status date
+              addressId:
+                type: string
+                example: 1-418707201
+                description: Unique address identification number
+              countryCode:
+                type: string
+                example: CH
+              houseNumber:
+                type: string
+                example: '4'
+              street:
+                type: string
+                example: Stoss
+              swissZipCode:
+                type: string
+                example: '9104'
+                description: Postal code for swiss addresses
+              town:
+                type: string
+                example: Waldstatt
+              zipCode:
+                type: string
+                example: '9104'
+                description: Postal code
+          example:
+            - aadsCode: 32
+              aadsDate: 2019-02-19
+              addressId: 1-418707201
+              countryCode: CH
+              houseNumber: '4'
+              street: Stoss
+              swissZipCode: '9104'
+              town: Waldstatt
+              zipCode: '9104'
+            - aadsCode: 32
+              aadsDate: 2004-08-24
+              addressId: 1-418707206
+              countryCode: CH
+              houseNumber: '1007'
+              street: Zürchersmühle
+              swissZipCode: '9107'
+              town: Urnäsch
+              zipCode: '9107'
+        newestAddress:
+          type: object
+          description: Newest address related information
+          properties:
+            aadsCode:
+              type: integer
+              example: 10
+              description: Address status code (see 4.3.16 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+            aadsDate:
+              type: string
+              example: 2021-01-15
+              description: Address status date
+            addressId:
+              type: string
+              example: 100-10343980
+              description: Unique address identification number
+            countryCode:
+              type: string
+              example: CH
+            houseNumber:
+              type: string
+              example: '9'
+            street:
+              type: string
+              example: Bachstrasse
+            swissZipCode:
+              type: string
+              example: '9100'
+              description: Postal code for swiss addresses
+            town:
+              type: string
+              example: Herisau
+            zipCode:
+              type: string
+              example: '9100'
+              description: Postal code
+    BankruptcyData:
+      type: object
+      description: Bankruptcy data related information (from SHAB)
+      properties:
+        details:
+          type: array
+          description: Detailed bankruptcy data related information
+          items:
+            type: object
+            properties:
+              messageDetails:
+                type: string
+                description: Message content
+                example: |-
+                  resolutionDate: 2018-09-05.
+                  addition: refusedLegacy.
+                  cessationDate: 2018-09-27.
+                  advanceAmount: 3000.
+                  daysAfterPublication: 10.
+                  entryDeadline: 2018-10-29.
+                  registrationOffice: Konkursamt Appenzell Ausserrhoden, Zweigstelle Heiden AR,
+                  Claudius Meier, Konkursbeamter,
+                  Sonnenweg 12, Postfach: 2,
+                  9410 Heiden.
+                  remarks: Ausgeschlagene Erbschaft gemäss Art. 193 SchKG.
+              publicationDate:
+                type: string
+                example: 2018-10-18
+              publicationNumber:
+                type: string
+                example: KK03-0000001304
+              rubric:
+                type: string
+                example: KK
+                description: Rubric value (see 4.3.8 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+              subRubric:
+                type: string
+                example: KK03
+                description: Subrubric value (see 4.3.9 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+              title:
+                type: string
+                description: Title of publication
+                example: Einstellung des Konkursverfahrens Caspar Bösch, ausgeschlagene Erbschaft
+    BlacklistData:
+      type: object
+      description: Blacklist data related information
+      properties:
+        lists:
+          type: array
+          description: Detailed blacklist data related information
+          items:
+            type: object
+            properties:
+              birthdate:
+                type: string
+                format: date
+                example: 1960-12-08
+                description: Birth date of blacklist hit
+              email:
+                type: string
+                example: test@test.com
+                description: E-mail of blacklist hit
+              ext1:
+                type: string
+                example: test data
+                description: Ext1 attribute of blacklist hit
+              ext2:
+                type: string
+                example: test data
+                description: Ext2 attribute of blacklist hit
+              firstName:
+                type: string
+                example: Caspar
+                description: First name of blacklist hit
+              hcbtCode:
+                type: integer
+                example: 1
+                description: Code of blacklist hit
+              houseNumber:
+                type: string
+                example: '9'
+                description: House number of blacklist hit
+              info:
+                type: string
+                example: test data
+                description: Info attribute of blacklist hit
+              initials:
+                type: string
+                example: test data
+                description: Initial attribute of blacklist hit
+              ipAddress:
+                type: string
+                example: 127.0.0.1
+                description: IP address of blacklist hit
+              lastName:
+                type: string
+                example: Bösch
+                description: Last name of blacklist hit
+              modifiedDate:
+                type: string
+                example: 2021-08-03
+                description: Modified date of blacklist hit
+              phone:
+                type: string
+                example: 123 456 789
+                description: Phone number of blacklist hit
+              sourceKey:
+                type: integer
+                example: 330956
+                description: Source key of blacklist hit
+              sourceName:
+                type: string
+                example: BLACKLIST_EXAMPLE
+                description: Source name of blacklist hit
+              street:
+                type: string
+                example: Bachstrasse
+                description: Street of blacklist hit
+              swissZipCode:
+                type: string
+                example: '9100'
+                description: Postal code for swiss addresses
+              town:
+                type: string
+                example: Herisau
+                description: Town of blacklist hit
+    CollectionData:
+      type: object
+      description: Collection data related information
+      properties:
+        aggregated:
+          type: object
+          description: Aggregated collection data related information
+          properties:
+            firstOpeningDate:
+              type: string
+              example: 1992-09-18
+              description: Opening date of first case
+            latestOpeningDate:
+              type: string
+              example: 2019-12-11
+              description: Opening date of latest case
+            latestPaymentAmount:
+              type: number
+              example: 300
+              description: Amount of latest payment
+            latestPaymentDate:
+              type: string
+              example: 2003-05-12
+              description: Date of latest payment
+            openCasesNum:
+              type: integer
+              example: 1
+              description: Number of open cases
+            totalAmount:
+              type: number
+              example: 61845.6
+              description: Total amount
+            totalCasesNum:
+              type: integer
+              example: 26
+              description: Number of total cases
+            totalOpenAmount:
+              type: number
+              example: 60839.8
+              description: Open amount
+        details:
+          type: array
+          description: Detailed collection data related information
+          items:
+            type: object
+            properties:
+              amount:
+                type: number
+                example: 903.7
+                description: Amount
+              caseRef:
+                type: string
+                example: '1090035'
+                description: Case reference
+              closingCode:
+                type: integer
+                nullable: true
+                example: null
+                description: Closing code (see 4.3.18 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+              closingDate:
+                nullable: true
+                example: null
+                description: Closing date
+              eventCode:
+                type: integer
+                nullable: true
+                example: 1011
+                description: Event (see 4.3.17 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+              industryCode:
+                type: integer
+                example: 1000
+                description: Industry Code (see 4.3.19 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+              latestPaymentAmount:
+                type: number
+                nullable: true
+                example: null
+                description: Amount of latest payment
+              latestPaymentDate:
+                type: string
+                nullable: true
+                example: null
+                description: Date of latest payment
+              legalState:
+                type: integer
+                example: 1
+                description: Indicates if prelegal (0) or legal (1) case
+              openAmount:
+                type: number
+                example: 903.7
+                description: Open amount
+              openingDate:
+                type: string
+                example: 2004-05-06
+                description: Opening date
+              sourceName:
+                type: string
+                example: RECASH
+                description: Source Name
+              status:
+                type: integer
+                example: 0
+                description: Indicates if case is closed (0) or still open (1)
+          example:
+            - amount: 903.7
+              caseRef: '1090035'
+              closingCode: null
+              closingDate: null
+              eventCode: 1011
+              industryCode: 1000
+              latestPaymentAmount: null
+              latestPaymentDate: null
+              legalState: 1
+              openAmount: 903.7
+              openingDate: 2004-05-06
+              sourceName: RECASH
+              status: 0
+            - amount: 457.7
+              caseRef: '1602276228'
+              closingCode: null
+              closingDate: null
+              eventCode: 1011
+              industryCode: 1000
+              latestPaymentAmount: null
+              latestPaymentDate: null
+              legalState: 1
+              openAmount: 457.7
+              openingDate: 1998-09-09
+              sourceName: RECASH
+              status: 0
+    CreditData:
+      type: object
+      description: Credit data related information
+      properties:
+        personCcsAlpha:
+          type: string
+          example: E
+          description: Alphanumeric score (see 4.3.4 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+        personCcsNum:
+          type: number
+          example: -6
+          description: Numeric score (see 4.3.4 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+        personAccsAlpha:
+          type: string
+          example: E
+          description: Alphanumeric score (see 4.3.4 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+        personAccsNum:
+          type: number
+          example: -6
+          description: Numeric score (see 4.3.4 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+        scoreDate:
+          type: string
+          example: 2021-05-25
+          description: Date of last score change
+    ECommerceData:
+      type: object
+      description: E-Commerce data related information
+      properties:
+        aggregated:
+          type: object
+          description: Aggregated eCommerce data related information
+          properties:
+            lastMonthContractsAmount:
+              type: number
+              example: 0
+              description: Amount of last month's contracts
+            lastMonthContractsNum:
+              type: integer
+              example: 0
+              description: Number of contracts last month
+            latestContractDate:
+              type: string
+              example: 2018-02-05
+              description: Date of latest contracts
+            latestPaymentDate:
+              type: string
+              example: 2018-03-05
+              description: Latest payment date
+            totalContractsAmount:
+              type: number
+              example: 171.69
+              description: Total amount of all contracts
+            totalContractsNum:
+              type: integer
+              example: 1
+              description: Number of total contracts
+            totalPaymentAmount:
+              type: number
+              example: 171.7
+              description: Total amount of all payment
+        details:
+          type: array
+          description: Detailed eCommerce data related information
+          items:
+            type: object
+            properties:
+              contractAmount:
+                type: number
+                example: 171.69
+                description: contract amount
+              contractDate:
+                type: string
+                example: 2018-02-05
+                description: contract date
+              contractId:
+                type: string
+                example: 00000-95401
+                description: contract ID
+              latestPaymentDate:
+                type: string
+                example: 2018-03-05
+                description: Date of latest payment
+              paymentAmount:
+                type: number
+                example: 171.7
+                description: Payment amount
+              sourceId:
+                type: integer
+                example: 5
+                description: Source ID
+    FraudData:
+      type: object
+      description: Fraud data related information
+      properties:
+        fraudScore:
+          type: number
+          example: 89.3
+          description: Fraud score
+        hits:
+          type: array
+          description: Fraud hit related information
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: 10-10875862
+                description: ID of hit
+              latestEntryDate:
+                type: string
+                example: 2015-01-27
+                description: Latest date of entry
+              registrationDate:
+                type: string
+                example: 2015-01-27
+                description: Registration date of hit
+              source:
+                type: string
+                example: blacklist
+                description: Source of hit
+              type:
+                type: string
+                example: person
+                description: Type of hit
+              value:
+                type: string
+                example: 1960-12-08
+                description: Value of hit
+          example:
+            - id: 10-10875862
+              latestEntryDate: 2015-01-27
+              registrationDate: 2015-01-27
+              source: blacklist
+              type: person
+              value: 1960-12-08
+            - latestEntryDate: 28.11.2021
+              registrationDate: 28.08.2021
+              source: b2cFraudPool
+              type: address
+              value: '504.95'
+        identityQuality:
+          type: array
+          description: Identity quality related information
+          items:
+            type: object
+            properties:
+              hitScore:
+                type: number
+                example: 100
+                description: Hit score of identity match
+              latestEntryDate:
+                type: string
+                example: 2020-01-01
+                description: Latest Date of entry
+              numPayments:
+                type: integer
+                example: 3
+                description: Number of payments of identity
+              registrationDate:
+                type: string
+                example: 2021-01-01
+                description: Registration date
+              type:
+                type: string
+                example: email
+                description: Type of identity
+          example:
+            - hitScore: 100
+              latestEntryDate: 2020-01-01
+              numPayments: 3
+              registrationDate: 2021-01-01
+              type: email
+        lists:
+          type: array
+          description: Blacklist related information
+          items:
+            type: object
+            properties:
+              birthdate:
+                type: string
+                format: date
+                example: 1960-12-08
+                description: Birth date of blacklist hit
+              blacklistId:
+                type: string
+                example: 10-10875862
+                description: ID of blacklist hit
+              countryCode:
+                type: string
+                example: CH
+                description: Country code of blacklist hit
+              email:
+                type: string
+                example: test@test.com
+                description: E-mail of blacklist hit
+              ext1:
+                type: string
+                example: test data
+                description: Ext1 attribute of blacklist hit
+              ext2:
+                type: string
+                example: test data
+                description: Ext2 attribute of blacklist hit
+              firstName:
+                type: string
+                example: Caspar
+                description: First name of blacklist hit
+              hcbtCode:
+                type: integer
+                example: 1
+                description: Code of blacklist hit
+              houseNumber:
+                type: string
+                example: '9'
+                description: House number of blacklist hit
+              info:
+                type: string
+                example: INVOICE
+                description: Info attribute of blacklist hit
+              initials:
+                type: string
+                example: test data
+                description: Initial attribute of blacklist hit
+              ipAddress:
+                type: string
+                example: test data
+                description: IP address of blacklist hit
+              lastName:
+                type: string
+                example: Bösch
+                description: Last name of blacklist hit
+              modifiedDate:
+                type: string
+                example: 2015-01-27
+                description: Modified date of blacklist hit
+              phone:
+                type: string
+                example: 123 456 789
+                description: Phone number of blacklist hit
+              sourceName:
+                type: string
+                example: BLACKLIST_EXAMPLE
+                description: Source name of blacklist hit
+              street:
+                type: string
+                example: 'Bachstrasse '
+                description: Street of blacklist hit
+              swissZipCode:
+                type: string
+                example: '9100'
+                description: Postal code of blacklist hit
+              town:
+                type: string
+                example: Herisau
+                description: Town of blacklist hit
+          example:
+            - birthdate: 1960-12-08
+              blacklistId: 10-10875862
+              countryCode: CH
+              email: test@test.com
+              ext1: test data
+              ext2: test data
+              firstName: Caspar
+              hcbtCode: 1
+              houseNumber: '9'
+              info: INVOICE
+              initials: test data
+              ipAddress: test data
+              lastName: Bösch
+              modifiedDate: 2015-01-27
+              phone: 123 456 789
+              sourceName: BLACKLIST_EXAMPLE
+              street: 'Bachstrasse '
+              swissZipCode: '9100'
+              town: Herisau
+        suspectList:
+          type: array
+          description: Suspect related information
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: SUSPC-10235
+                description: ID of suspect
+              registrationDate:
+                type: string
+                example: 2022-01-13
+                description: Registration Date
+              source:
+                type: string
+                example: scoring
+                description: Source of suspect
+              type:
+                type: string
+                example: phone
+                description: Type of suspect
+              value:
+                type: string
+                example: 123 456 789
+                description: Value of suspect
+          example:
+            - id: SUSPC-10235
+              registrationDate: 2022-01-13
+              source: scoring
+              type: phone
+              value: 123 456 789
+    GeneralData:
+      type: object
+      description: General data related information
+      properties:
+        birthdate:
+          type: string
+          format: date
+          example: 1960-12-08
+          description: Birth date (e.g. 1980-01-01)
+        firstName:
+          type: string
+          example: Caspar
+          description: First name
+        hitScore:
+          type: number
+          example: 98.67
+          description: Grade of match (see 4.3.6 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+        lastName:
+          type: string
+          example: Bösch
+          description: Last name
+        personId:
+          type: integer
+          example: 1123715
+          description: Unique party identifier
+        requestId:
+          type: string
+          example: 123abc
+          nullable: true
+          description: Request ID (the one sent in the request)
+        responseId:
+          type: integer
+          example: 5480180
+          description: Unique Response ID
+    ManagerData:
+      type: object
+      description: Manager data related information
+      properties:
+        activeMandatesNum:
+          type: integer
+          example: 1
+          description: Number of active mandates
+        companies:
+          type: array
+          description: Company related information
+          items:
+            type: object
+            properties:
+              organisationName:
+                type: string
+                example: Holding Galleria
+                description: Company Name
+              uidOrganisationId:
+                type: integer
+                example: 100363928
+                description: Uid in integer format
+          example:
+            - organisationName: Holding Galleria
+              uidOrganisationId: 100363928
+        companyFailuresNum:
+          type: integer
+          example: 0
+          description: Number of company failures
+        iid:
+          type: string
+          example: b2c-10977318
+          description: Manager id
+    PursuitData:
+      type: object
+      description: Pursuit data related information
+      properties:
+        details:
+          type: array
+          description: Detailed pursuit data related information
+          items:
+            type: object
+            properties:
+              amountOfGarnishments:
+                type: number
+                example: 747
+                description: amount of garnishments
+              amountOfObjections:
+                type: number
+                example: 0
+                description: amount of objections
+              amountOfOpenProsecutions:
+                type: number
+                example: 747
+                description: amount of open prosecutions
+              amountOfPaidProsecutions:
+                type: number
+                example: 0
+                description: amount of paid prosecutions
+              amountOfThreatedProsecutions:
+                type: number
+                example: 0
+                description: amount of threated prosecutions
+              amountOfUnpaidDebtsCertificates:
+                type: number
+                example: 68223
+                description: amount of unpaid debt certificates
+              controlDate:
+                type: string
+                example: 2021-01-19
+                description: Collection date
+              controlLocation:
+                type: string
+                example: Zürich
+                description: Town of responsible authority
+              controlYear:
+                type: integer
+                example: 2021
+                description: Year of entry
+              numberOfGarnishments:
+                type: integer
+                example: 1
+                description: number of garnishments
+              numberOfObjections:
+                type: integer
+                example: 0
+                description: number of objections
+              numberOfOpenProsecutions:
+                type: integer
+                example: 1
+                description: number of open prosecutions
+              numberOfPaidProsecutions:
+                type: integer
+                example: 0
+                description: number of paid prosecutions
+              numberOfThreatedProsecutions:
+                type: integer
+                example: 0
+                description: number of threated prosecutions
+              numberOfUnpaidDebtsCertificates:
+                type: integer
+                example: 27
+                description: number of unpaid debt certificates
+              pursuitId:
+                type: integer
+                example: 302175
+                description: Identification number
+              status:
+                type: integer
+                example: 0
+                description: Status value (see 4.3.7 from CI-WS (Credit Information Web Services) v0.0.27 of Intrum)
+          example:
+            - amountOfGarnishments: 747
+              amountOfObjections: 0
+              amountOfOpenProsecutions: 747
+              amountOfPaidProsecutions: 0
+              amountOfThreatedProsecutions: 0
+              amountOfUnpaidDebtsCertificates: 68223
+              controlDate: 2021-01-19
+              controlLocation: Zürich
+              controlYear: 2021
+              numberOfGarnishments: 1
+              numberOfObjections: 0
+              numberOfOpenProsecutions: 1
+              numberOfPaidProsecutions: 0
+              numberOfThreatedProsecutions: 0
+              numberOfUnpaidDebtsCertificates: 27
+              pursuitId: 302175
+              status: 0
+    PremiumConsumerScoreData:
+      type: object
+      description: Premium consumer score related information
+      properties:
+        personPcsNum:
+          type: integer
+          description: Premium consumer score value
+        pcsHitType:
+          type: string
+          description: |
+            Premium consumer score hit type - PHO: Person
+            known in house, PST: Person known in street, PCI:
+            Person known in city, PCO: Person known in
+            Switzerland, LAA: Household known in house,
+            OAF: (Only) address known, NAF: Address
+            unknown
+
+    ReportData:
+      type: object
+      nullable: true
+      description: Report data related information
+      properties:
+        url:
+          type: string
+          description: URL of report of found person
+          example: https://website.intrum-credit-information-ws.ch/de/?page=b2c_berichtsdetails&lang=de&reportType=credit&personId=1123715
+        base64:
+          type: string
+          description: Report as base64
+
+    VerificationResultRequest:
+      description: |
+        Tenant will use this request data to update case status.
+      type: object
+      required:
+        - identificationProcess
+        - verificationData
+      properties:
+        identificationProcess:
+          $ref: '#/components/schemas/IdentificationProcess'
+        verificationData:
+          $ref: '#/components/schemas/VerificationDataRequest'
+        additionalDocuments:
+          allOf:
+          - $ref: "#/components/schemas/AdditionalDocument"
+
+    IdentificationProcess:
+      description: |
+        Identification process.
+      nullable: false
+      type: object
+      required:
+        - result
+      properties:
+        result:
+          nullable: false
+          $ref: '#/components/schemas/VerificationResultStatus'
+        reason:
+          description: Detail reason. This field should be mandatory when the result is `CANCELLED` or `FRAUD_SUSPICION_CONFIRMED`
+          example: IDENT_OTHER
+          nullable: true
+          type: string
+        agentName:
+          description: agentName
+          nullable: true
+          type: string
+        wasNfcUsed:
+          type: boolean
+          nullable: true
+          example: false
+          description: |
+           * `true` : If NFC could be scanned successfully.
+           * `false`: If any non-NFC document is scanned, or the NFC scan fails, a visual scan of the document is performed as a fallback.
+
+    VerificationResultStatus:
+      description: Verification result value.
+      type: string
+      enum:
+      - SUCCESS
+      - CANCELED
+      - FRAUD_SUSPICION_CONFIRMED
+
+    VerificationDataRequest:
+      type: object
+      description: Verification data
+      nullable: true
+      properties:
+        verificationDocument:
+          $ref: '#/components/schemas/VerificationDocumentRequest'
+        personData:
+          $ref: '#/components/schemas/VerificationPersonData'
+        address:
+          $ref: '#/components/schemas/VerificationAddressData'
+
+    VerificationDocumentRequest:
+      type: object
+      nullable: true
+      description: verified data by tenant
+      properties:
+        title:
+          type: string
+          nullable: true
+          description: Title
+        classification:
+          type: string
+          enum:
+          - IDCARD
+          - PASSPORT
+          - DRIVERS_LICENSE
+          - RESIDENCE_PERMIT
+          nullable: true
+          description: classification of document
+        firstName:
+          type: string
+          nullable: true
+          description: First name.
+          example: Peter Fritz
+        lastName:
+          type: string
+          nullable: true
+          description: Last name.
+          example: Meier
+        documentNumber:
+          type: string
+          nullable: true
+          description: Document number
+          example: X1234563
+        birthdate:
+          type: string
+          nullable: true
+          description: The birthdate with `yyyy-MM-dd` format.
+          format: date
+        issuingDate:
+          type: string
+          nullable: true
+          description: The issuing date in 'yyyy-MM-dd' format.
+          format: date
+        expiryDate:
+          type: string
+          nullable: true
+          description: The expiry date with `yyyy-MM-dd` format.
+          format: date
+        nationality:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        issuerCountry:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        gender:
+          type: string
+          nullable: true
+          description: Gender as stated on document.
+          example: M
+        birthPlace:
+          type: string
+          nullable: true
+          description: Birthplace as stated on document.
+        issuedBy:
+          type: string
+          nullable: true
+        entryDate:
+          type: string
+          nullable: true
+          description: The entryDate in 'yyyy-MM-dd' format.
+          format: date
+        residencePermitType:
+          type: string
+          nullable: true
+          description: Type of residence permit when scanning.
+
+    VerificationPersonData:
+      type: object
+      properties:
+        mobileCountryCode:
+          type: string
+          nullable: true
+          description: |
+            Country calling code (international subscriber dialing (ISD) code) of mobile phone number (might be used for TAN in case of signing), without leading "+" or leading 00.
+            It's required for the case which enabled protected case.
+          example: 41
+        mobilePhoneNumber:
+          type: string
+          example: "23456789"
+          nullable: true
+          description: |
+            Mobile phone number without country code and leading 0 (might be used for TAN in case of signing).
+            It's required for the case which enabled protected case.
+        email:
+          type: string
+          format: email
+          description: Email of person
+          example: erika@mail.com
+          nullable: true
+
+    VerificationAddressData:
+      type: object
+      properties:
+        street:
+          description: Street
+          example: 'St Gallerstrasse'
+          type: string
+          nullable: true
+        streetNumber:
+          description: Street number.
+          type: string
+          nullable: true
+        city:
+          description: City.
+          type: string
+          nullable: true
+        country:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        zipCode:
+          type: string
+          description: Zip Code
+          example: '9300'
+          nullable: true
+
+    VerificationResultResponse:
+      type: object
+      properties:
+        caseId:
+          description: The id of the identification case that was updated.
+          type: string
+          format: uuid
+        caseStatus:
+          $ref: '#/components/schemas/UbiIdStatus'
+
+    AisSigningResponse:
+      properties:
+        publicKey:
+          type: string
+          nullable: false
+          example: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmyWo1fUUXrdh+EKSNqwaoqoLesHs+PDjTnZ0E/uwcUxC2SqF0fo43VhOliQfW5/6m+fgWUKUQ+0qNpVWipx9oogi+fasp4DdGDgPUJv6DqrmZy7wvQ56Pzk5rfL08PjDuq6QzKP7FPdRHCnhK/y3Lic4M48V+AKTA3BU9eVum2ubKyCpxErvWHDcaRL+WH4efSsIQzvl/HHQ+9n1e2VcJhPyDLPUicl0Dr+DAscZKAr2Z3T1KJBUQhU9s36DN25Ss4sNmQczKF8uulp9RFll3ZJNlzc+Ap1srSmy16+astVUo0jRhAZ1Q4Lj09tKvfuRZ0QsT638CzadBNvoajmpqwIDAQAB
+          description: Represent an PKCS#1 RSA Public Key (RFC3447) encoding in PEM format without header `-----BEGIN PUBLIC KEY-----` and footer `-----END PUBLIC KEY-----`.
+        publicCertificate:
+          type: string
+          nullable: false
+          example: MIIFJDCCAwygAwIBAgIGAZnC469gMA0GCSqGSIb3DQEBCwUAMDExETAPBgNVBAoMCG1lc29uZWVyMQ8wDQYDVQQIDAZadXJpY2gxCzAJBgNVBAYTAkNIMB4XDTI1MTAwODA4MTUyNVoXDTI4MTAwNzA4MTUyNVowMTERMA8GA1UECgwIbWVzb25lZXIxDzANBgNVBAgMBlp1cmljaDELMAkGA1UEBhMCQ0gwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCKsTKL+2TAJkKcp+j0UOnpdisuUEo8vBV/jidJ0bqZdmLjt9EfYMC5qvWziGplAYJc0hoi/4MLZkkYzS4Gf4sbQF1O2n2NXu8RiwFAJENYB2PRuCQo7aFx9M7pzr+GtEZb1FHd9r3e6dGO0WAeLwCG9CgWf+7HhCB+sV+f6eWKxTDFhT3P6ywaO/rtYnTvS7wazrxnQM2oUgtx9T+6gxWeSxpLb6gRAMjoFtvm9MfywC+Ts2hPr/ivYJd0qumSjDD5fUuKi4cFYm9PSg8aMlNJqGucC2RYPEY4/l1reHwBofjS+Kvt5Hexul7Y7GZADkBfavRhWQ4eAT4mNIblCwlS/xTRS95YRGm61TQwhSYanC49EZXvNlXPFZkIBB+2FBSwmvCr+2V04W7dRvIZrEfZAyC4r1sgrOoSwh/RTXTBUcWpNXNV/8k7QXIvnf/HfE/hLhop1ZZVLGRPi4xoxZAzGYRn9HaGkcfT7ywk5/eom9me7fbW/2Pgi3KrS3rQDyxZ22F0mZXiAiO2OXy28gcWFxeJrY9JJSWEXz5udP8PYgl2m7xF39pxApo8YbbiOFRbTcsk+1ejwnFIbpbHdYfRPxnkyK+Mh9Pi3+odYU9wj1b37yrX5uVnpGM/m7Tbj4AzcHvHpIvh218L1vQOhdZhwO1oWaLeh2PYrDhcrkoZ8QIDAQABo0IwQDAdBgNVHQ4EFgQURH6ESVa5jcHQq9VmMH9/QG2/NYUwHwYDVR0jBBgwFoAURH6ESVa5jcHQq9VmMH9/QG2/NYUwDQYJKoZIhvcNAQELBQADggIBAINgkI4nxQkSBGnKE5LxSMEm0B4XP5SmQBR9F2axp1onRll4I+zlwIxZp7HZhvvq4CWHlFpkVIW9lMGXNkaevq7onr0w3iODCjhgpeMhVEqepV3/Ov+5UzaFhymY7n5rsI5SEGvLMXCYGEDW079Z+espd62qmrC2m/IFBHmZDQijjCRIyloakgc6QrWraheYWbzmqhgCpbbIF+S3xyrkqi5vuEBKwb4ZvoBnaBZiFuiOe3U+7bkEmZ69DazjlzwuvJ102C6hdnvc/LCrPygrzUzQGOc63Rw9aKgUeK/45dYDfFgPPrRBq5K14Vg/DCLBOFudT0pn7IcYbZZjaOW4z5HCwbyw0r4lBQeBTePFvmE1sepFpGjYitVkyHRieaezoUmRpwqX9v2NEwYBi2x3RvrbxcTmTFO39PWZhHcEwI7bhBIWsalHbhoJeOVAq/SHxaYgghRUNGlM7DTMgWbr0izg2zjn8mbagDRp0R+wuaLh9nUoj2kKMXLsXU004J34PcLz8bDlywUYBjo9RVTbjrCpJmPgL8cuX2wltyRx/P5+5WPBs+ywWBPnCTLy+xYftQ2+LQVXToW+pUFhnSTvoKkO+hZZiVoXwTA2a13W6OULWyB+iDnJa+KpW0TpEN5RsYoDIwhEAq9GK1hRXxYA8JSir2Z+x6f6B5+70c3+5UMd
+          description: Represent an X.509 Version 3 Certificate (RFC 5280) encoding in PEM format without header `-----BEGIN CERTIFICATE KEY-----` and footer `-----END CERTIFICATE KEY-----`.
+        expirationTimestamp:
+          type: string
+          format: date-time
+          nullable: false
+          example: 2024-10-19T10:33:14.358Z
+          description: The key's expiration timestamp in UTC. Once it expires, the key cannot be used for any purpose.
+
+
+    Cnf:
+      type: object
+      nullable: true
+      description: Swiss EID CNF (confirmation) structure.
+      properties:
+        crv:
+          type: string
+          nullable: true
+        kty:
+          type: string
+          nullable: true
+        x:
+          type: string
+          nullable: true
+        y:
+          type: string
+          nullable: true
+        jwk:
+          $ref: '#/components/schemas/Jwk'
+
+    Jwk:
+      type: object
+      nullable: true
+      description: JSON Web Key parameters.
+      properties:
+        crv:
+          type: string
+          nullable: true
+        kty:
+          type: string
+          nullable: true
+        x:
+          type: string
+          nullable: true
+        y:
+          type: string
+          nullable: true
+
+    Status:
+      type: object
+      nullable: true
+      description: Swiss EID status information.
+      properties:
+        statusList:
+          $ref: '#/components/schemas/StatusList'
+
+    StatusList:
+      type: object
+      nullable: true
+      description: Swiss EID status list entry.
+      properties:
+        idx:
+          type: integer
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        uri:
+          type: string
+          nullable: true

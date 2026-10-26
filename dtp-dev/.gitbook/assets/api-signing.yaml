@@ -1,0 +1,2213 @@
+openapi: 3.0.3
+
+info:
+  title: m_IDeal Signing API
+  description: |
+    m_IDeal Signing API Provided for Tenant's Staff
+
+    ### A few conventions:
+
+    - Resources are represented in plural form.
+    - Words in each path segment are separated by hyphens "-".
+
+    ## Authentication
+
+    m_IDeal will grant you an API token (JWT) with a lifetime (by default) of 1 year. This JWT token **MUST** be included in the header `Authorization: Bearer {{ TOKEN }}`.
+
+    ## m_IDeal Sign Start Links Validity
+
+    In order to increase the security of the Signing process, each start link generated can only be used **once** and has a very **short** lifetime.
+
+    To achieve this, each start link will contain a parameter `&nonce=ABCDEF12345`. The `nonce` is an one-time token and has a short lifetime (default to 4 minutes). The m_IDeal Sign Application, on browser, will use this `nonce` to acquire an Access Token which has to be used on every subsequent calls to m_IDeal Sign API. Without a valid `nonce`, the start link will be completely useless.
+
+    When a new `DocumentBasket` is created via the operation `postDocumentBasket`, the start links for signing process includes a new `nonce` for each Signers. However, if the link expires, Tenants can use the operation `requestNewSignLinks` to obtain the new start links with new valid `nonce`.
+    Tenants are free to add more parameters into the provided URLs but **MUST** ensure that the `nonce` is always present.
+
+  contact:
+    email: m_ideal@mesoneer.io
+  version: 3.35.0
+
+tags:
+  - name: ubiId-signing
+    description: Signing with ubiId
+  - name: evidences
+    description: Operations related to the evidence
+
+
+servers:
+  - url: https://sandbox-autoid.id-validation.ch/api/v1
+
+paths:
+  "/{tenantId}/document-baskets":
+    post:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      tags:
+        - ubiId-signing
+      summary: Create/Schedule a new DocumentBasket
+      description: |
+        ## Notes on ubiSignUrl
+
+        The `ubiSignUrl` created in this API will be attached with `nonce` and it can be used to start the signing process on m_IDeal application. In the case of signing with eSign, the `ubiSignUrl` is returned as `null`.
+
+        ### Sample ubiSignUrl
+
+        ```
+        https://sandbox-autoid.id-validation.ch/sign/start?signerid=1f368510-0a42-48f6-94ba-a2858516e952&language=en&nonce=ik8X3jRpdUGHV3OgRm0wWQ
+        ```
+      operationId: postDocumentBasket
+      security:
+        - jwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostDocumentBasketRequest'
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostDocumentBasketResponse'
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        500:
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentBasketCreateIntrumIdentErrorResponse'
+
+
+  "/{tenantId}/document-baskets/{documentBasketId}/documents":
+    post:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/documentBasketId'
+      tags:
+        - ubiId-signing
+      summary: Upload one Document into a Document Basket
+      operationId: uploadDocumentsToDocumentBasket
+      security:
+        - jwt: []
+      description: |
+        This API allows upload one document into an existing `DocumentBasket`.
+
+        ### File Restrictions
+
+        - Ony PDF files are allowed at the moment.
+        - Each file is allowed only 5MB (this restriction is subject to change at runtime)
+        - The `filename` will be ignored by m_Sign. See `displayName` below.
+
+        ### Metadata for a document
+
+        Each document can have the signature placement(s) described in its metadata. The coordination and the size will be used by our service to place the signature stamp onto the signed version. If `signaturePlacements` is an empty array or omitted, signature stamps will not be displayed on signed documents.
+
+        The required field `displayName` will be used to display to the End User (those who sign the document). m_Sign will apply some sanitization onto the value to remove unwanted characters. 
+
+        ### Rate Limiting
+
+        This operation is subject to Rate Limiting.
+
+        ### Sample Request for EID
+
+        ```
+        POST /api/v1/{{ tenantId }}/document-baskets/{{ documentBasketId }}/documents HTTP/1.1
+        Accept: application/json
+        Content-Type: multipart/form-data; boundary=--------------------------364394932600671770332074
+        Content-Length: 6903308
+
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="file"; filename="signing_document_one_but_it_will_be_discarded_anyway.pdf"
+        Content-Type: application/pdf
+
+        <binary content of file>
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="metadata"
+        Content-Type: application/json
+
+        {
+          "displayName" : "Dies ist ein persönliches Papier",
+          "extDocumentId":"123",
+          "signaturePlacements": [
+            {
+              "signerId": "f5e29ebf-95d4-463d-88e5-3655f788cb76",
+              "page" : 1, // start from 1
+              "top": 120,
+              "left": 334,
+              "width": 400,
+              "height": 300,
+              "textSettings": {
+                "dateFormat": "dd/MM/yyyy HH:mm",
+                "timeZone": "Europe/Zurich"
+              }
+            }
+          ],
+          "sortingOrder": 1
+        }
+        ----------------------------364394932600671770332074--
+        ```
+        ### Sample Request for Namirial
+
+        ```
+        POST /api/v1/{{ tenantId }}/document-baskets/{{ documentBasketId }}/documents HTTP/1.1
+        Accept: application/json
+        Content-Type: multipart/form-data; boundary=--------------------------364394932600671770332074
+        Content-Length: 6903308
+
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="file"; filename="signing_document_one_but_it_will_be_discarded_anyway.pdf"
+        Content-Type: application/pdf
+
+        <binary content of file>
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="metadata"
+        Content-Type: application/json
+
+        {
+          "displayName" : "Dies ist ein persönliches Papier",
+          "extDocumentId":"123",
+          "signaturePlacements": [
+            {
+              "signerId": "f5e29ebf-95d4-463d-88e5-3655f788cb76",
+              "page" : 1, // start from 1
+              "y": 120,
+              "x": 334,
+              "width": 400,
+              "height": 300,
+              "fontName": "Arial",
+              "fontSize": 10,
+              "textVisible": true,
+              "image": //base64 encoded string
+            }
+          ],
+          "sortingOrder": 1
+        }
+        ----------------------------364394932600671770332074--
+        ```
+        ### Sample Request for Swisscom
+
+        ```
+        POST /api/v1/{{ tenantId }}/document-baskets/{{ documentBasketId }}/documents HTTP/1.1
+        Accept: application/json
+        Content-Type: multipart/form-data; boundary=--------------------------364394932600671770332074
+        Content-Length: 6903308
+
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="file"; filename="signing_document_one_but_it_will_be_discarded_anyway.pdf"
+        Content-Type: application/pdf
+
+        <binary content of file>
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="metadata"
+        Content-Type: application/json
+
+        {
+          "displayName" : "Dies ist ein persönliches Papier",
+          "extDocumentId":"123",
+          "assignedTo": [
+            "f5e29ebf-95d4-463d-88e5-3655f788cb76",
+            "db838014-5b6a-41e3-b9a7-9095f42b00de"
+          ],
+          "signaturePlacements": [
+            {
+              "signerId": "f5e29ebf-95d4-463d-88e5-3655f788cb76",
+              "page" : 0, // start from 0
+              "y": 120,
+              "x": 334,
+              "width": 400, // It's optional for type `TEMPLATE` of signature template.
+              "height": 300, // It's optional for type `TEMPLATE` of signature template.
+              "image": // Image with format base64 encoded string. It's optional for type `TEMPLATE` of signature template.
+            }
+          ],
+          "signatureLevel": "SES",
+          "sortingOrder": 1
+        }
+        ----------------------------364394932600671770332074--
+        ```
+
+        ### Sample Request for Intrum
+
+        ```
+        POST /api/v1/{{ tenantId }}/document-baskets/{{ documentBasketId }}/documents HTTP/1.1
+        Accept: application/json
+        Content-Type: multipart/form-data; boundary=--------------------------364394932600671770332074
+        Content-Length: 6903308
+
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="file"; filename="signing_document_one_but_it_will_be_discarded_anyway.pdf"
+        Content-Type: application/pdf
+
+        <binary content of file>
+        ----------------------------364394932600671770332074
+        Content-Disposition: form-data; name="metadata"
+        Content-Type: application/json
+
+        {
+          "displayName" : "Dies ist ein persönliches Papier",
+          "extDocumentId":"123",
+          "signaturePlacements": [
+            {
+              "signerId": "f5e29ebf-95d4-463d-88e5-3655f788cb76",
+              "page" : 1, // start from 1
+              "bottom": 120,
+              "left": 334,
+              "width": 400,
+              "height": 300,
+              "fontSize": 5,
+              "imageName": "hsqes_stamp"
+            }
+          ],
+          "sortingOrder": 1
+        }
+        ----------------------------364394932600671770332074--
+        ```
+
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - metadata
+              properties:
+                file:
+                  description: Binary data of the file to be uploaded.
+                  type: string
+                  format: binary
+                metadata:
+                  $ref: "#/components/schemas/DocumentMetaData"
+            encoding:
+              file:
+                contentType: application/octet-stream
+              metadata:
+                contentType: application/json
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadSigningDocumentBasketRequest"
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedDocument'
+        404:
+          description: DocumentBasket Not Found or Tenant Not Found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentBasketNotFoundErrorResponse'
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadDocumentErrorResponse'
+        413:
+          description: |
+            Content Too Large. Only returned for the `application/json` request body, when the
+            raw request size exceeds the configured maximum (this restriction is subject to
+            change at runtime).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadDocumentPayloadTooLargeErrorResponse'
+        417:
+          description: Expectation Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadDocumentErrorResponse'
+
+  "/{tenantId}/document-baskets/{documentBasketId}/documents/{documentId}":
+    get:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/documentBasketId'
+        - $ref: '#/components/parameters/documentId'
+        - $ref: '#/components/parameters/acceptOverride'
+      tags:
+        - ubiId-signing
+      summary: Get latest document content
+      description: |
+        Get latest document content by provided document ID in the upload document response
+        **NOTE**:
+        The `Accept` and `Accept-Override` header can be used with `application/pdf+json` media type
+      operationId: getSigningDocument
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Base64EncodedFile'
+        404:
+          description: Resource Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceNotFoundResponse'
+
+  "/{tenantId}/document-baskets/{documentBasketId}":
+    get:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/documentBasketId'
+      tags:
+        - ubiId-signing
+      summary: Allow tenant to obtain the document basket data
+      description: |
+        ## Note for ubiSignUrl
+
+        The ubiSignUrl returned from this API will never have the `nonce` attached as a parameter. Therefore it cannot be authorized to start a signing process on m_Sign application.
+        To get new valid sign links, use the operation `requestNewSignLinks`.
+
+      operationId: getDocumentBasket
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/GetDocumentBasketResponse'
+
+  "/{tenantId}/document-baskets/{documentBasketId}/sign-links":
+    post:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/documentBasketId'
+      tags:
+        - ubiId-signing
+      summary: |
+        Create new DocumentBasket's sign Links.
+        * When signing with INTRUM, there are no sign links returned.
+      operationId: requestNewSignLinks
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentBasketSignLinks'
+        403:
+          description: when signLinkLifetimeSeconds in signProfile is set, but there are no links returned for signers based on last identification success time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentBasketSignLinksForbiddenErrorResponse'
+
+        404:
+          description: DocumentBasket Not Found or Tenant Not Found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentBasketNotFoundErrorResponse'
+
+  "/{tenantId}/document-baskets/{documentBasketId}/revoke":
+    put:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/documentBasketId'
+      tags:
+        - ubiId-signing
+      summary: Revoke a document basket
+      operationId: revokeDocumentBasket
+      security:
+        - jwt: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeDocumentBasketRequest'
+        required: false
+      responses:
+        200:
+          description: Successfully revoke the DocumentBasket
+        404:
+          description: DocumentBasket Not Found or Tenant Not Found.
+        400:
+          description: DocumentBasket cannot be revoked because of param expirationTimestamp already passed.
+        403:
+          description: |
+            Document basket status isn't allowed to be revoked. For e.g:
+            * `SIGNED`
+            * `DOWNLOADED`
+            * `DELETED`
+            * `DELETED_TEMPORARY`
+
+  "/{tenantId}/document-baskets/{documentBasketId}/files.zip":
+    get:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/documentBasketId'
+        - $ref: '#/components/parameters/acceptOverride'
+      tags:
+        - ubiId-signing
+      summary: Allow tenant to obtain zip file with original document(s), signed document(s) and signer audit log document(s).
+      description: |
+        **IMPORTANT**:
+        The response will be in `application/octet-stream` format if the `Accept` header value is `*/*`, `application/json`, or `application/octet-stream`.
+        To return a zip file encoded in JSON format, set `application/zip+json` for the `Accept` header or use the `Accept-Override` header instead.
+        ## Content
+
+        Depending on the status of the `DocumentBasket`, either the original documents or signed documents are included.
+
+        If the `DocumentBasket` has not been signed by any signers, only the original documents are included. Likewise, once the `DocumentBasket` is signed by one of the signers, signed documents are the only documents included.
+
+        **NOTE**: For signing with SWISSCOM provider, the latest state of documents (signed or has not been signed) will be included in the zip file.
+
+        The signing report is also included in the zip file.
+
+        ### Multiple Signers Notice
+
+        If a `DocumentBasket` consists of more than one signers. Please note that depending on the timing, the result of this API may contain partially-signed documents or fully-signed documents.
+
+        ## Files' Name Convention
+
+        The zip file will have the following structure
+
+        ### Uploaded document
+
+        **NOTE**: The `{{ externalDocumentId }}` placeholder will be omitted if it is not provided when the document is uploaded.
+
+        For example:
+
+        - When there hasn't been any signer signed the document(s).
+
+        ```
+        files.zip
+          |- {{ documentId }}_{{ externalDocumentId }}.pdf
+          |- {{ documentId }}_{{ externalDocumentId }}.pdf
+          |- ...
+        ```
+
+        - When one of the signers has signed.
+
+        ```
+        files.zip
+          |- {{ documentId }}_{{ externalDocumentId }}_signed.pdf
+          |- {{ documentId }}_{{ externalDocumentId }}_signed.pdf
+          |- ...
+        ```
+
+        ### Signing report
+
+        ```
+        files.zip
+          |- UMB_Sign_report_{{ documentBasketId }}.pdf
+          |- ...
+        ```
+
+        ### ID copy (Only available for SWISSCOM signing provider)
+
+        - ID copy document has not been signed by the signer.
+
+        ```
+        files.zip
+          |- IDCopy_{{ signerId }}.pdf
+          |- ...
+        ```
+
+        - ID copy document has been signed by the signer.
+
+        ```
+        files.zip
+          |- IDCopy_{{ signerId }}_signed.pdf
+          |- ...
+        ```
+
+        **NOTE**: To enable the signing ID copy feature, please contact us for the information.
+
+        ## Zip File's Name Convention
+
+        The ZIP file name will be served in the header `Content-Disposition`. The value will be in the format:
+
+        ```
+        filename="{{ documentBasketId }}_{{ extCaseId }}.zip"
+        ```
+
+        The placeholder `extCaseId` is the value submitted when a `DocumentBasket` is created.
+        
+      operationId: getDocumentBasketZip
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Base64EncodedFile'
+          headers:
+            Content-Disposition:
+              description: |
+                **Note**: This header will be not available when the media type is application/json 
+                
+                Instruct the User-Agent how to deal with the binary content.
+                This operation **always** use `Content-Disposition: attachment`.
+
+                The `filename` SHOULD be used for saving into file system. The value is in the format:
+
+                ```
+                filename="{{ documentBasketId }}_{{ extCaseId }}.zip"
+                ```
+              schema:
+                type: string
+              required: false
+              example:
+                attachment; filename="{{ documentBasketId }}_{{ extCaseId }}.zip"
+
+  "/{tenantId}/document-baskets/{documentBasketId}/last-document":
+    post:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/documentBasketId'
+      tags:
+        - ubiId-signing
+      summary: |
+        Notify the last document is ready to start signing session.
+      operationId: notifyLastDocumentReady
+      security:
+        - jwt: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyLastDocumentReadyRequest'
+      responses:
+        200:
+          description: OK
+
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  "/{tenantId}/evidences/{msisdn}":
+    get:
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+
+        - in: path
+          name: msisdn
+          required: true
+          description: The mobile phone number in international format.
+          schema:
+            type: string
+            pattern: '\d+'
+
+        - in: query
+          name: signProfileId
+          description: Define signing profile ID where the assurance level is used to validate the evidence
+          required: true
+          schema:
+            type: integer
+
+      tags:
+        - evidences
+      summary: |
+        Lookup and verify evidence by mobile phone number (msisdn).
+      operationId: lookupEvidence
+      security:
+        - jwt: []
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LookupEvidenceResponse'
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LookupEvidenceBadRequestResponse'
+        404:
+          description: Resource Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceNotFoundResponse'
+
+components:
+  securitySchemes:
+    jwt:
+      type: http
+      description: Default Authentication/Authorization
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    tenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    documentBasketId:
+      name: documentBasketId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    documentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    acceptOverride:
+      name: Accept-Override
+      in: header
+      required: false
+      description: |
+        Override the `Accept` header and specify Media Type of the response format data. This field value should comply with RFC 6838.
+        Supported override values:
+        * `application/zip+json` - Zip file will be encoded and returned in `application/json` format
+        * `application/pdf+json` - PDF file will be encoded and returned in `application/json` format
+      schema:
+        type: string
+        example: 'application/zip+json'
+
+  schemas:
+    UploadSigningDocumentBasketRequest:
+      type: object
+      description: |
+        Additional information describes the associating information of the uploaded file like signature placements.
+
+        **IMPORTANT**:
+        The parameters in `signaturePlacements` is depend on each signing provider (EID, Namirial, Swisscom).
+        Check `Sample Request` section to know which param need to have for each signing provider.
+      allOf:
+        - type: object
+          required:
+            - file
+            - displayName
+          properties:
+            file:
+              type: string
+              description: pdf with format base64 encoded string.
+        - $ref: '#/components/schemas/DocumentMetaData'
+
+    DocumentMetaData:
+      type: object
+      description: |
+        A metadata describes the associating information of the uploaded file like signature placements.
+
+        **IMPORTANT**:
+        The parameters in `signaturePlacements` is depend on each signing provider (EID, Namirial, Swisscom).
+        Check `Sample Request` section to know which param need to have for each signing provider.
+      properties:
+        extDocumentId:
+          $ref: "#/components/schemas/ExternalDocumentId"
+        displayName:
+          type: string
+          maxLength: 255
+          description: >
+            A 255-character-long text denotes the name of the document. This value will be used for displaying to signers.
+        assignedTo:
+          items:
+            type: string
+            format: uuid
+          nullable: true
+          description: >
+            Available for SWISSCOM only. Each signer has to sign its own ID copy and the set of documents assigned to him. Per default all documents should be signed by all signers, so if the array assignedTo is empty, all signers should sign the document. Only signer id belong to document basket is added to this AssignedTo.
+        signaturePlacements:
+          type: array
+          items:
+            $ref: "#/components/schemas/SignaturePlacement"
+        signatureLevel:
+          allOf:
+            - $ref: "#/components/schemas/SignatureLevel"
+          nullable: true
+        sortingOrder:
+          type: integer
+          nullable: true
+          description: the sorting order of document in document basket
+
+    DocumentMetaDataResponse:
+      type: object
+      description: A metadata describes the associating information of the uploaded file.
+      properties:
+        extDocumentId:
+          $ref: "#/components/schemas/ExternalDocumentId"
+        displayName:
+          type: string
+          maxLength: 255
+          description: >
+            A 255-character-long text denotes the name of the document. This value will be used for displaying to signers.
+        assignedTo:
+          items:
+            type: string
+            format: uuid
+          nullable: true
+          description: >
+            Available for SWISSCOM only. Each signer has to sign its own ID copy and the set of documents assigned to him. Per default all documents should be signed by all signers, so if the array assignedTo is empty, all signers should sign the document. Only signer id belong to document basket is added to this AssignedTo.
+        signaturePlacements:
+          type: array
+          items:
+            $ref: "#/components/schemas/SignaturePlacement"
+        sortingOrder:
+          type: integer
+          nullable: true
+          description: the sorting order of document in document basket
+
+    SignaturePlacement:
+      description: |
+        A signature placement defines the position on the PDF document on which the signature stamp will be created.
+
+        A `signerId` can be specified to indicate the owner of the signature in the use case that more than one signers are required to sign the document.
+
+        The positioning values `x`, `y`, `top`, `bottom`, `left`, `width` and `height` are specified in Point unit.
+
+        **IMPORTANT**:
+        It is the responsibilities of the client to specify the positioning values correctly. If one of these values are incorrect, upon being applied to the PDF document, it would yield undeterminitic result.
+        For example: If the paper size of the uploaded document is A4 which is 595 x 842 points, the x/left and y/top values of the signature panel must be inside the boundary of the page.
+
+      type: object
+      nullable: true
+      required:
+        - signerId
+        - page
+        - width
+        - height
+      properties:
+        signerId:
+          description: |
+            Specify signing document for signer by ID. Apply for the below signing provider:
+            * EID 
+            * Namirial
+            * Swisscom
+            * Intrum
+          type: string
+          format: uuid
+        page:
+          type: integer
+          description: |
+            The page number in the document on which the signature panel will appear. Apply for the below signing provider:
+            * EID: start from 1, appear on first page of pdf document.
+            * Namirial: start from 1
+            * Swisscom: start from 0
+            * MAB Swisscom: start from 0
+            * Sign8: start from 0
+            * Intrum: start from 1
+          example: 1
+        top:
+          description: |
+            * EID: The distance from the top border to the top of the signature panel in Point unit.
+          type: integer
+        bottom:
+          description: |
+            * Intrum: The distance from the bottom border to the bottom of the signature panel in Point unit.
+          type: integer
+        left:
+          description: |
+            The distance from the left border to the left of the signature panel in Point unit. Apply for the below signing provider:
+            * EID
+            * Intrum
+          type: integer
+        width:
+          description: |
+            The width of the signature panel rectangle in Point unit. Value must be bigger than 0. Apply for the below signing provider:
+            * EID 
+            * Namirial
+            * Swisscom
+            * Intrum
+          type: integer
+        height:
+          description: |
+            The height of the signature panel rectangle in Point unit. Value must be bigger than 0. Apply for the below signing provider:
+            * EID 
+            * Namirial
+            * Swisscom
+            * Intrum
+          type: integer
+        x:
+          description: |
+            Horizontal coordinate on which to place the signature panel, starting from the left of the page to the left of the signature panel in point unit. Apply for the below signing provider:
+            * Namirial
+            * Swisscom
+          type: integer
+        y:
+          description:  |
+            Vertical coordinate on which to place the signature panel. Apply for the below signing provider:
+            * Namirial: Starting from the bottom of the page to the bottom of the signature panel in point unit.
+            * Swisscom: Starting from the top of the page to the top of the signature panel in point unit.
+          type: integer
+        fontName:
+          description: |
+            * Namirial: The font name how the signer name is displayed in the document.
+          type: string
+        fontSize:
+          description: |
+            The font size how the signer name is displayed in the document in point unit. Apply for the below signing provider:
+            * Namirial
+            * Intrum
+          type: integer
+        textVisible:
+          description: |
+            * Namirial: Allows to display or not the textual part.
+          type: boolean
+        image:
+          description: |
+            The image encoded in base64. Apply for the below signing provider:
+            * Namirial: The image that is the background of the signature panel.
+            * Swisscom: Original image will be placed at the specified location.
+          type: string
+        imageName:
+          description: |
+            * Intrum: Name of the signature image. If not provided, a default signature image from the signing provider will be used.
+          type: string
+        textSettings:
+          type: object
+          nullable: true
+          description: |
+            Define the current timestamp format, time zone for EID signature. 
+            If null, the default values in the application properties and tenant setting will be used.
+            Apply for the below signing provider:
+            * EID
+          properties:
+            dateFormat:
+              type: string
+              example: dd/MM/yyyy HH:mm
+            timeZone:
+              type: string
+              description: the time zone identifier used as default value when sign with EID. For a correct format time zone id, refer to the column TZ identifier in the link https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+              example: Europe/Berlin
+
+    UploadedDocument:
+      description: |
+        Represent an uploaded Document into a `DocumentBasket`.
+      allOf:
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              $ref: '#/components/schemas/DocumentId'
+        - $ref: '#/components/schemas/DocumentMetaDataResponse'
+
+    DocumentBasketStatus:
+      type: string
+      description: |
+        * `OUTSTANDING` - For none of the signers, the signing request was initialized.
+        * `SIGNED_PARTIALLY` - A part of the assigned signers has already signed the document.
+        * `SIGNED` - All signers have signed the document.
+        * `REJECTED` - At least one assigned signer has rejected the signing. The overall status of the document becomes rejected as the document is legally not valid due to the fact that not all required signers have signed the document.
+        * `FAILED` - There was either a technical problem with the signing process or the signing was not done on time by at least one of the signers.
+        * `DOWNLOADED` - The signed documents were downloaded by the API.
+        * `DELETED` - The files are not available anymore. The complete deletion is triggered X days after a document basket was marked as `DELETED_TEMPORARY`.
+        * `DELETED_TEMPORARY` - X days after a document was downloaded by the API the document basket is marked as temporary deleted.
+        * `CORRUPTED` - The signed documents were downloaded by the API but sign report failed to generate.
+      enum:
+        - OUTSTANDING
+        - SIGNED_PARTIALLY
+        - SIGNED
+        - REJECTED
+        - FAILED
+        - DOWNLOADED
+        - DELETED
+        - DELETED_TEMPORARY
+        - CORRUPTED
+
+    UbiIdStatus:
+      type: string
+      description: |
+        * `INITIALIZED` - the case is created but not started on expired.
+        * `TIMEOUT` - session of a ubiId Case is time out
+        * `IDENTIFICATION_SUCCESSFUL` - result of identification was successful.
+        * `IDENTIFICATION_FAILED` - identification failed.
+        * `VERIFICATION_PENDING` - the verification process is pending.
+        * `VERIFICATION_CONFIRMED` - verification process successfully finished.
+        * `VERIFICATION_REJECTED` - manual Verification process failed.
+        * `DOWNLOADED` - zip file of a identification case with previous status VERIFICATION_CONFIRMED is downloaded.
+        * `DOWNLOAD_FAILED` - zip file of a identification case with previous status VERIFICATION_CONFIRMED is download failed.
+        * `DELETED` - person data and data deleted and deletion triggered on eId side.
+        * `DELETED_MARKED` - deletion triggered in ubiId application. will be deleted x days after action was triggered.
+        * `DELETED_TEMPORARY` - x days after a document was downloaded by the API the document basket is marked as temporary deleted.
+        * `IDENTIFICATION_NOT_REQUIRED` - the case is either identified by m_IDeal or has valid identification evidence by a qTSP provider.
+        * `SCHEDULED` - the case is scheduled by 3rd party application.
+        * `CORRUPTED` - ubiId case has corrupted files, it is no longer valid to be used.
+      enum:
+        - INITIALIZED
+        - TIMEOUT
+        - IDENTIFICATION_SUCCESSFUL
+        - IDENTIFICATION_FAILED
+        - VERIFICATION_PENDING
+        - VERIFICATION_CONFIRMED
+        - VERIFICATION_REJECTED
+        - DOWNLOADED
+        - DOWNLOAD_FAILED
+        - DELETED
+        - DELETED_MARKED
+        - DELETED_TEMPORARY
+        - IDENTIFICATION_NOT_REQUIRED
+        - SCHEDULED
+        - CORRUPTED
+
+    QualifiedTrustedServiceProviderStatus:
+      type: string
+      description: |
+        This status represents the status of connected qTSP provider.
+        * `NO_REGISTRATION` - No evidence is delivered to a qTSP provider by m_IDeal.
+        * `REGISTRATION_OUTSTANDING` - the profile is connected to qTSP but there is no valid evidence provided by qTSP provider. 
+        * `REGISTRATION_INITIALIZED` - verification is initialized and assigned to a qTSP provider.
+        * `REGISTRATION_COMPLETED` - verification is confirmed by a a qTSP provider.
+        * `REGISTRATION_FAILED` - verification is rejected by a qTSP provider.
+        * `EVIDENCE_VALID` - there is valid evidence provided by qTSP provider.
+      enum:
+        - NO_REGISTRATION
+        - REGISTRATION_OUTSTANDING
+        - REGISTRATION_INITIALIZED
+        - REGISTRATION_COMPLETED
+        - REGISTRATION_FAILED
+        - EVIDENCE_VALID
+
+    SigningStatus:
+      type: string
+      description: |
+        This status represents the signing status of this signer.
+        * `NO_SIGNING`: no signing will be done (m_IDeal is used without signing or no documentBasket assigned).
+        * `OUTSTANDING`: the signing will be initalized as soon as the identification is done.
+        * `PENDING`: the signing is initialized but not yet signed.
+        * `SIGNED`: the signing was done successfuly.
+        * `REJECTED`: the signer rejected the signing.
+        * `FAILED`: the signing failed due to technical issues or because the signing request was expired.
+        * `TIMEOUT`: the signing session is timeout.
+      enum:
+        - NO_SIGNING
+        - OUTSTANDING
+        - PENDING
+        - SIGNED
+        - REJECTED
+        - FAILED
+        - TIMEOUT
+
+    Expiration:
+      description: the expiration must be in `yyyy-MM-dd'T'HH:mm:ss` format
+      type: string
+      format: date-time
+      example: '2020-11-21T15:23:23'
+
+    EvidenceIdentifier:
+      description: Normally this is the MSISDN(mobile phone). in case special step-up authentication is defined with ubitec the identifier might be different)
+      type: string
+      example: '41765820128'
+      nullable: true
+
+    IssuerCountry:
+      type: string
+      description: Iso Code of country
+      example: 'CHE'
+      nullable: true
+
+    DocumentId:
+      description: Internal document reference generated by ubiSign.
+      type: string
+      format: uuid
+
+    ExternalDocumentId:
+      type: string
+      maxLength: 255
+      pattern: '^[a-zA-Z0-9-_.]+$'
+      description: >
+        A 255-character-long text which can be used as reference for each document.
+        Please note that the allowed characters are `[a-zA-Z0-9-_.]`.
+      example: '123456-ABCDEF_xxyyy'
+      nullable: true
+
+    Signer:
+      type: object
+      properties:
+        signerId:
+          type: string
+          format: uuid
+          description: the identifier of the signer
+        ubiIdCaseId:
+          type: string
+          format: uuid
+          description: identifier of identification case that reference to the signer
+        extPersonId:
+          type: string
+          description: external id of person from request signer list
+          nullable: true
+        extCaseId:
+          description: External Case ID can be set by the external application.
+          type: string
+          nullable: true
+        extApplication:
+          description: Code of external application assign to the document basket
+          type: string
+          example: 'SELFONBOARDING'
+          nullable: true
+        externalUserId:
+          description: external user id is used when using `EXTUSERID` in Sign8 template with Sign8 service.
+          type: string
+          nullable: true
+        ubiIdCategory:
+          description: Category of the identification. It can be used to filter in tenant application.
+          type: string
+          nullable: true
+          example: 'SELFIDENTIFICATION'
+        lastName:
+          type: string
+          nullable: true
+        firstName:
+          type: string
+          nullable: true
+        dateOfBirth:
+          description: the date must be in yyyy-MM-dd format
+          type: string
+          format: date
+          nullable: true
+        evidenceIdentifier:
+          $ref: '#/components/schemas/EvidenceIdentifier'
+        nationality:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        issuerCountry:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        ubiIdUrl:
+          type: string
+          description: url to start the identification case identity process (this will not available when case status is `IDENTIFICATION_NOT_REQUIRED`)
+          nullable: true
+        ubiSignUrl:
+          type: string
+          nullable: true
+          description: url to start the signing process (this will not available when signing with eSign).
+        expiration:
+          $ref: '#/components/schemas/Expiration'
+        ubiIdStatus:
+          $ref: '#/components/schemas/UbiIdStatus'
+        qtspStatus:
+          $ref: '#/components/schemas/QualifiedTrustedServiceProviderStatus'
+        signingStatus:
+          $ref: '#/components/schemas/SigningStatus'
+        identificationRedirectUrls:
+          $ref: '#/components/schemas/IdentificationRedirectUrls'
+        signingRedirectUrls:
+          $ref: '#/components/schemas/SigningRedirectUrls'
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+          nullable: true
+        fraudRisk:
+          $ref: '#/components/schemas/FraudRisk'
+        rejectReason:
+          description: Reason provided by the signer when rejecting the signing process.
+          type: string
+          nullable: true
+          default: '-'
+
+    GetDocumentBasketResponse:
+      type: object
+      properties:
+        extCaseId:
+          description: >-
+            External Case ID can be set by the external application.
+            Supported characters for safe ZIP filename generation: letters (A-Z,
+            a-z), digits (0-9), '.', '\_', '-', '(', ')' and space. Other
+            characters are accepted but are replaced with '\_' in generated ZIP
+            filenames.
+          type: string
+          nullable: true
+        extApplication:
+          type: string
+          nullable: true
+        documentBasketId:
+          type: string
+          format: uuid
+        documentBasketStatus:
+          $ref: '#/components/schemas/DocumentBasketStatus'
+        ubiSignExpirationTimestamp:
+          $ref: '#/components/schemas/DocumentBasketExpirationTimestamp'
+        signers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Signer'
+        originalDocuments:
+          description: If there is no document was uploaded, empty array will be returned.
+          type: array
+          items:
+            $ref: '#/components/schemas/UploadedDocument'
+        signedDocuments:
+          description: List of signed documents with hash information.
+          type: array
+          items:
+            $ref: '#/components/schemas/SignedDocumentWithHashResponse'
+        signingTermsCondition:
+          description: The configured terms and conditions for the document basket taken from the signing profile by the time it is created.
+          type: array
+          items:
+            $ref: '#/components/schemas/TermsConditionCmsContent'
+        isRevoked:
+          description: whether this basket is revoked or not.
+          type: boolean
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+          nullable: true
+
+    PostDocumentBasketRequest:
+      type: object
+      required:
+        - ubiSignProfileId
+        - ubiIdConfiguration
+        - signers
+      properties:
+        extCaseId:
+          description: >-
+            External Case ID can be set by the external application.
+            Supported characters for safe ZIP filename generation: letters (A-Z,
+            a-z), digits (0-9), '.', '\_', '-', '(', ')' and space. Other
+            characters are accepted but are replaced with '\_' in generated ZIP
+            filenames.
+          type: string
+        extApplication:
+          description: Code of external application assign to the document basket
+          type: string
+          example: 'SELFONBOARDING'
+        ubiSignProfileId:
+          type: integer
+          format: int32
+        ubiSignExpirationTimestamp:
+          $ref: '#/components/schemas/DocumentBasketExpirationTimestamp'
+        ubiIdConfiguration:
+          $ref: '#/components/schemas/UbiIdConfiguration'
+        signers:
+          $ref: '#/components/schemas/SignerRequest'
+        waitForUploadDocument:
+          description: Determine if user should wait for uploading documents when start signing process.
+          type: boolean
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+          nullable: true
+
+    PostDocumentBasketResponse:
+      type: object
+      properties:
+        extCaseId:
+          description: >-
+            External Case ID can be set by the external application.
+            Supported characters for safe ZIP filename generation: letters (A-Z,
+            a-z), digits (0-9), '.', '\_', '-', '(', ')' and space. Other
+            characters are accepted but are replaced with '\_' in generated ZIP
+            filenames.
+          type: string
+          nullable: true
+        extApplication:
+          description: Code of external application
+          type: string
+          example: 'SELFONBOARDING'
+          nullable: true
+        documentBasketId:
+          description: Id of document basket. A document basket is a group of documents signed by the same persons (list of document posted)
+          type: string
+          format: uuid
+        documentBasketStatus:
+          $ref: '#/components/schemas/DocumentBasketStatus'
+        ubiSignExpirationTimestamp:
+          $ref: '#/components/schemas/DocumentBasketExpirationTimestamp'
+        signers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Signer'
+        waitForUploadDocument:
+          type: boolean
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+          nullable: true
+
+    DoIdentification:
+      nullable: true
+      type: string
+      description: |
+        Logic for identification process. It's required if `signersEvidence` is not NULL.
+        * `IF_REQUIRED` - In case of no valid evidence, the case is in status SCHEDULE and the identification process is initialized. Otherwise, the case would be in status IDENTIFICATION_NOT_REQUIRED and can sign without identification. SIGN8 has no evidence lookup: the case starts in IDENTIFICATION_NOT_REQUIRED and SIGN8 starts an identification itself if the signer has no certificate - except when the sign profile signs an ID copy (`signIdCopy`) and the signer has no `skipIdCopy`, then the case is SCHEDULED.
+        * `ALWAYS` - Always do new identification before signing (even valid evidence was found).
+        * `NEVER` - Never initialize identification. In case there is no valid evidence found, an error will be returned and signing is not possible. Not supported for SIGN8 sign profiles - the request is rejected regardless of evidence.
+      enum:
+        - IF_REQUIRED
+        - ALWAYS
+        - NEVER
+
+    SignerEvidence:
+      type: object
+      required:
+        - language
+      properties:
+        lastName:
+          type: string
+          example: Mustermann
+          description: Last name of person.
+          nullable: true
+        firstName:
+          type: string
+          example: Erika
+          description: First name of person.
+          nullable: true
+        birthdate:
+          type: string
+          format: date
+          description: The birthdate in 'yyyy-mm-dd' format.
+          example: "1998-12-18"
+          nullable: true
+        nationality:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        eIdIdType:
+          type: integer
+          description: ID Type of eId based on nationality and identification Type. The mapping table to determine eIdIdType will be provided by ubiId.
+          example: 34
+          nullable: true
+        language:
+          $ref: '#/components/schemas/Language'
+        issuerCountry:
+          $ref: '#/components/schemas/Alpha3CountryCode'
+        extPersonId:
+          description: External id of person from request signer list
+          type: string
+          nullable: true
+        mobileCountryCode:
+          type: string
+          description: |
+            Country calling code (international subscriber dialing (ISD) code) of mobile phone number (might be used for TAN in case of signing), without leading "+" or leading 00.
+            It's required for the case which enabled protected case.
+          example: 41
+          nullable: true
+        mobilePhoneNumber:
+          type: string
+          description: |
+            Mobile phone number without country code and leading 0 (might be used for TAN in case of signing).
+            It's required for the case which enabled protected case.
+          example: 791234567
+          nullable: true
+        email:
+          type: string
+          format: email
+          description: Email of person
+          example: erika@mail.com
+          nullable: true
+        alreadyIdentified:
+          type: boolean
+          nullable: true
+        documentNumber:
+          description: Number of the document.
+          type: string
+          example: X0001
+          nullable: true
+        issuingDate:
+          description: the issuingDate must be in yyyy-MM-dd format
+          type: string
+          format: date
+          nullable: true
+        expiryDate:
+          description: the expiryDate must be in yyyy-MM-dd format
+          type: string
+          format: date
+          nullable: true
+        extCaseId:
+          description: >-
+            External case ID can be set by the external application.
+            Supported characters for safe ZIP filename generation: letters (A-Z,
+            a-z), digits (0-9), '.', '\_', '-', '(', ')' and space. Other
+            characters are accepted but are replaced with '\_' in generated ZIP
+            filenames.
+          type: string
+          nullable: true
+        extApplication:
+          description: Code defined by external application
+          type: string
+          example: 'SELFONBOARDING'
+          nullable: true
+        externalUserId:
+          description: external user id is used when using `EXTUSERID` in Sign8 template with Sign8 service.
+          type: string
+          nullable: true
+        ubiIdCategory:
+          description: Category of the identification. It can be used to filter in tenant application.
+          type: string
+          nullable: true
+          example: 'SELFIDENTIFICATION'
+        identificationRedirectUrls:
+          $ref: '#/components/schemas/IdentificationRedirectUrls'
+        signingRedirectUrls:
+          $ref: '#/components/schemas/SigningRedirectUrls'
+        termsAndConditionsAlreadyAccepted:
+          description: |
+            Option to skip legal step on identification flow.
+            Can only be `true` when attribute `allowExternalAcceptanceOfTermsAndConditions` in profile is enabled, otherwise `false`.
+          type: boolean
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+          nullable: true
+        street:
+          type: string
+          description: Street
+          example: 'St Gallerstrasse'
+          nullable: true
+        houseNumber:
+          type: string
+          description: House Number
+          example: '59'
+          nullable: true
+        town:
+          type: string
+          description: Town
+          example: Wittenbach
+          nullable: true
+        zipCode:
+          type: string
+          description: Zip Code
+          example: '9300'
+          nullable: true
+        protectedCase:
+          description: Allow to enable/disable protecting case for tenants who enabled protected case feature.
+          type: boolean
+        skipIdCopy:
+          description: Allow to skip ID Copy
+          type: boolean
+        webform:
+          $ref: '#/components/schemas/Webform'
+        extIpAddress:
+          type: string
+          description: IP address of user when creating the case.
+          example: '192.168.1.1'
+          nullable: true
+        numOfDocuments:
+          description: >-
+            Number of documents to be processed or required. Must be a whole number between 1 and 500
+            (the platform's document limit per basket); a value with a fractional part (e.g. 2.5) or
+            outside that range is rejected. Falls back to the identification profile's default
+            when omitted. Required (here or as profile default) when the signing provider is `SIGN8` or
+            `MAB_SWISSCOM`, or the identification provider is `SIGN8_INTRUM` or `MAB_INTRUM`, because the
+            count is sent to the provider when identification starts.
+          type: integer
+          minimum: 1
+          maximum: 500
+          example: 5
+          nullable: true
+
+    Webform:
+      type: object
+      description: Configuration of webform for the case.
+      properties:
+        formProfile:
+          description: Id of webform profile.
+          type: integer
+          format: int32
+          example: 1
+        signFormPDF:
+          description: Whether to download the webform pdf.
+          type: boolean
+          example: true
+        formPosition:
+          type: string
+          description: Indicate the position of the form in the flow.
+          example: BEFORE_ID
+        request:
+          $ref: '#/components/schemas/WebFormRequest'
+
+    WebFormRequest:
+      type: object
+      properties:
+        redirectUrl:
+          type: string
+          description: Redirect URL for the form submission (incl. {id} placeholder for the form data ID)
+        issuer:
+          $ref: '#/components/schemas/WebFormPersonInfo'
+        beneficiary:
+          $ref: '#/components/schemas/WebFormPersonInfo'
+        relationship:
+          type: string
+        excludedLegalTransactions1:
+          type: string
+        excludedLiabilities1:
+          type: string
+        excludedLegalTransactions2:
+          type: string
+        excludedLiabilities2:
+          type: string
+        excludedLiabilities3:
+          type: string
+        signCity:
+          type: string
+        expirationDate:
+          pattern: '^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$'
+          type: string
+          description: Expiration date date in strict yyyy-MM-dd format
+          format: date
+        '@type':
+          type: string
+          example: GeneralvollmachtFormData
+
+    WebFormPersonInfo:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Title
+        firstName:
+          type: string
+          description: Firstname
+        lastName:
+          type: string
+          description: Lastname
+        birthdate:
+          pattern: '^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$'
+          type: string
+          description: Date of birth date in strict yyyy-MM-dd format
+          format: date
+        nationality:
+          type: string
+          description: Nationality
+        street:
+          type: string
+          description: Street
+        zipCode:
+          type: string
+          description: ZIP code
+        city:
+          type: string
+          description: City
+        country:
+          type: string
+          description: Country
+        email:
+          type: string
+          description: Email
+        phonePrefix:
+          type: string
+          description: Phone, country prefix
+          example: '+41'
+        phone:
+          type: string
+          description: Phone
+          example: '791234567'
+      description: Beneficiary representation
+
+    UbiIdConfiguration:
+      type: object
+      description: The configuration for ubiId
+      properties:
+        doIdentification:
+          $ref: '#/components/schemas/DoIdentification'
+        ubiIdProfileId:
+          description: Id of the profile used for identification. The profile must have `qtspIntegration` and `identificationVerifcation` enabled. It's required if `signersEvidence` is not NULL.
+          type: integer
+          format: int32
+          example: 1
+          nullable: true
+        ubiIdCategory:
+          description: Category of the identification. It can be used to filter in tenant application.
+          type: string
+          nullable: true
+          example: 'SELFIDENTIFICATION'
+        expirationTimestamp:
+          description: The datetime when this the identification case is no longer resumable. The format of the expiration must be ISO-8601 format(`yyyy-MM-dd'T'HH:mm:ss`) and always in UTC time.
+          type: string
+          format: date-time
+          example: "2020-11-21T15:23:23"
+          nullable: true
+
+    SignerRequest:
+      type: object
+      description: List of persons requested to sign the document. If available the existing evidence should be used. (optional. either `signersUbiId` or `signersFromExistingCases` or `signersEvidence` must have at least 1 record)
+      properties:
+        signersUbiId:
+          description: |
+            List of identification cases linked to the document basket. (optional. either `signersUbiId` or `signersFromExistingCases` or `signersEvidence` must have at least 1 record). After the identification is done, verified and evidence confirmed signing will be done.
+            Either `signersUbiId` or `signersFromExistingCases` could be used in the request.
+            If current signing provider is `INTRUM`, only allow 1 case with status SCHEDULED.
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        signersFromExistingCases:
+          description: |
+            List of identification cases linked to the document basket similar with `signersUbiId` but includes extended properties. (optional. either `signersUbiId` or `signersFromExistingCases` or `signersEvidence` must have at least 1 record).
+            Either `signersUbiId` or `signersFromExistingCases` could be used in the request.
+            If current signing provider is `INTRUM`, only allow 1 case with status SCHEDULED.
+          type: array
+          items:
+            type: object
+            properties:
+              idCaseId:
+                type: string
+                format: uuid
+              signingRedirectUrls:
+                $ref: "#/components/schemas/SigningRedirectUrls"
+          nullable: true
+        signersEvidence:
+          description: |
+            List of persons requested to sign the document. If available the existing evidence should be used. (optional. either signersUbiId or signersEvidence must have at least 1 record)
+            If current signing provider is `INTRUM`, only allow 1 signer evidence item.
+            * `ubiIdProfileId` in `ubiIdConfiguration` must be configured.
+            * `doIdentification` in `ubiIdConfiguration` must be configured.
+          type: array
+          items:
+            $ref: '#/components/schemas/SignerEvidence'
+          nullable: true
+
+    Document:
+      type: object
+      required:
+        - documentId
+      properties:
+        documentId:
+          $ref: '#/components/schemas/DocumentId'
+        externalDocumentId:
+          $ref: '#/components/schemas/ExternalDocumentId'
+
+    DocumentRequest:
+      type: object
+      properties:
+        externalDocumentId:
+          $ref: '#/components/schemas/ExternalDocumentId'
+
+    DocumentBasketExpirationTimestamp:
+      description: The expiration date time of document basket, if this field is not provided in the request the default 180 days expiration time will be used. The format of the expiration must be ISO-8601 format(`yyyy-MM-dd'T'HH:mm:ss`) and always in UTC time.
+      type: string
+      format: date-time
+      example: "2020-11-21T15:23:23"
+
+    ErrorResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          errorCode:
+            type: string
+            example: fieldName.invalid
+          errorMessage:
+            type: string
+            example: 'This is the error detail message.'
+
+    DocumentBasketCreateIntrumIdentErrorResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          errorCode:
+            type: string
+            example: 'IntrumEsignIdentId.createFail'
+          errorMessage:
+            type: string
+            example: 'Cannot generate Intrum ident Id. Please try again.'
+
+
+    UploadDocumentErrorResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          errorCode:
+            type: string
+            example: 'document.fileSizeExceeded'
+          errorMessage:
+            type: string
+            example: 'The uploaded file exceeds the allowed file limit of 204,800 bytes.'
+
+    UploadDocumentPayloadTooLargeErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: '413 CONTENT_TOO_LARGE'
+        errorMessage:
+          type: string
+          example: 'Request content exceeded limit of 15,728,640 bytes'
+
+    DocumentBasketNotFoundErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: '404 NOT_FOUND'
+        errorMessage:
+          type: string
+          example: 'Could not find document basket by a3cc2054-9dca-4e4f-87f8-9982dfc0cac0.'
+
+    DocumentBasketSignLinksForbiddenErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: '403 FORBIDDEN'
+        errorMessage:
+          type: string
+          example: 'Time limit to get sign link has been exceeded.'
+
+    DocumentBasketSignLinks:
+      type: object
+      properties:
+        signingLinks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SigningLink'
+
+    SigningLink:
+      type: object
+      properties:
+        signerId:
+          type: string
+          format: uuid
+        ubiSignUrl:
+          type: string
+        nonce:
+          type: string
+
+    Language:
+      type: string
+      enum:
+        - DE
+        - FR
+        - IT
+        - EN
+      description: |
+        * `DE` - German
+        * `FR` - France
+        * `IT` - Italian
+        * `EN` - English
+
+    TermsConditionCmsContent:
+      type: object
+      properties:
+        language:
+          type: string
+          example: de
+        introductionText:
+          type: string
+          description: the title of term condition
+        contents:
+          type: array
+          items:
+            type: object
+            properties:
+              toggleName:
+                type: string
+              toggleText:
+                type: string
+                description: the toggle text which can contain placeholders which will be replace by place holders items. Note that the index is important here, the {1} will be replaced by the first placeholder and so on
+                example: I give the {1} and {2} consent to the processing of personal data.
+              placeholders:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      description:  the type of placeholders. See the value for details
+                      enum:
+                      - tenant-resource
+                      - url
+                      - disposable-contract
+                    text:
+                      type: string
+                      description: the text will be displayed
+                    value:
+                      type: string
+                      description: this specify how find the resource, the value format depend on the type. For tenant-resource, it's relative path of resource in tenant resource folder; for url, it's full url to get resource; for disposable contract, it's always ignored
+
+    RevokeDocumentBasketRequest:
+      type: object
+      properties:
+         expirationTimestamp:
+          description: The expiration date time of document basket, if this field is not provided in the request the default expiration time will be assigned to now(UTC). The format of the expiration must be ISO-8601 format(`yyyy-MM-dd'T'HH:mm:ss`) and always in UTC time.
+          type: string
+          format: date-time
+          example: "2023-10-22T15:23:23"
+
+    FraudRisk:
+      type: object
+      description: Fraud risk.
+      nullable: true
+      properties:
+        risk_rating:
+          description: Risk rating.
+          type: string
+          nullable: true
+        riskCode:
+          description: Risk code.
+          type: array
+          items:
+            type: string
+          nullable: true
+        fraudCheckId:
+          type: string
+          format: uuid
+          description: Unique identifier for the fraud check.
+          nullable: true
+        request_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the request.
+          nullable: true
+        risk_score:
+          type: string
+          description: Risk score associated with the fraud assessment.
+          nullable: true
+        risk_rules:
+          type: array
+          description: List of rules contributing to the fraud risk assessment.
+          items:
+            $ref: '#/components/schemas/RiskRule'
+        device:
+          $ref: '#/components/schemas/Device'
+        network:
+          $ref: '#/components/schemas/Network'
+        digitalId:
+          $ref: '#/components/schemas/DigitalId'
+        account:
+          $ref: '#/components/schemas/Account'
+        sessionHistory:
+          $ref: '#/components/schemas/SessionHistory'
+        identDeviceHistory:
+          type: array
+          description: History of ThreatMetrix sessions for the case, ordered chronologically (oldest first).
+          items:
+            $ref: '#/components/schemas/IdentDeviceHistory'
+          nullable: true
+
+    SessionHistory:
+      type: object
+      description: Aggregate counts of distinct values across the case's ThreatMetrix sessions.
+      nullable: true
+      properties:
+        numberOfDeviceIds:
+          type: integer
+          description: Number of distinct device IDs across all sessions.
+        numberOfTrueIpGeo:
+          type: integer
+          description: Number of distinct true IP geo locations across all sessions.
+        numberOfTrueIpRegionIsoCodes:
+          type: integer
+          description: Number of distinct true IP region ISO codes across all sessions.
+
+    IdentDeviceHistory:
+      type: object
+      description: Fraud-relevant data for a single ThreatMetrix session.
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Time the session was last updated.
+          nullable: true
+        step:
+          type: string
+          description: Identification step the session belongs to.
+          nullable: true
+        deviceId:
+          type: string
+          description: Unique identifier for the device.
+          nullable: true
+        risk_rating:
+          type: string
+          description: Risk rating of the session.
+          nullable: true
+        risk_score:
+          type: string
+          description: Risk score associated with the session.
+          nullable: true
+        risk_rule_categories:
+          type: array
+          description: Categories of triggered risk rules.
+          items:
+            type: string
+          nullable: true
+        true_ip_address:
+          type: string
+          description: True IP address of the request.
+          nullable: true
+        true_ip_geo:
+          type: string
+          description: Geographical location code of the IP address (e.g., CH for Switzerland).
+          nullable: true
+        true_ip_region_iso_code:
+          type: string
+          description: ISO code for the region of the IP address.
+          nullable: true
+        true_ip_city:
+          type: string
+          description: City associated with the IP address.
+          nullable: true
+        browser_spoof_rating:
+          type: string
+          description: Rating indicating likelihood of browser spoofing (e.g., low, high).
+          nullable: true
+        vpn_rating:
+          type: string
+          description: Rating indicating likelihood of VPN usage (e.g., low, high).
+          nullable: true
+
+    RiskRule:
+      type: object
+      description: Represents a single rule contributing to the fraud risk assessment.
+      properties:
+        rid:
+          type: string
+          description: Unique identifier for the risk rule.
+          nullable: true
+        score:
+          type: string
+          description: Score associated with the risk rule.
+          nullable: true
+        reason_code:
+          type: string
+          description: Reason code for the risk rule (e.g., Device_blocked, email_known).
+          nullable: true
+
+    Account:
+      type: object
+      description: Represents account details.
+      nullable: true
+      properties:
+        account_first_name:
+          type: string
+          description: First name of the account holder.
+          nullable: true
+        account_last_name:
+          type: string
+          description: Last name of the account holder.
+          nullable: true
+        account_address_zip:
+          type: string
+          description: ZIP code of the account holder's address.
+          nullable: true
+        account_address_city:
+          type: string
+          description: City of the account holder's address.
+          nullable: true
+        account_address_street_1:
+          type: string
+          description: Primary street address of the account holder.
+          nullable: true
+        account_address_street_2:
+          type: string
+          description: Secondary street address of the account holder.
+          nullable: true
+        account_telephone:
+          type: string
+          description: Telephone number of the account holder.
+          nullable: true
+        account_telephone_first_seen:
+          type: string
+          description: Date when the telephone number was first seen.
+          nullable: true
+        account_telephone_activities:
+          type: array
+          description: List of activities associated with the telephone number.
+          items:
+            type: string
+          nullable: true
+        account_email:
+          type: string
+          description: Email address of the account holder.
+          nullable: true
+        account_email_first_seen:
+          type: string
+          description: Date when the email address was first seen.
+          nullable: true
+        account_email_activities:
+          type: array
+          description: List of activities associated with the email address.
+          items:
+            type: string
+          nullable: true
+
+    DigitalId:
+      type: object
+      description: Represents digital identity information.
+      nullable: true
+      properties:
+        digital_id:
+          type: string
+          description: Unique digital identifier for the user or device.
+          nullable: true
+        digital_id_first_seen:
+          type: string
+          description: Date when the digital ID was first seen.
+          nullable: true
+        digital_id_confidence_rating:
+          type: string
+          description: Confidence rating for the digital ID (e.g., low, medium, high).
+          nullable: true
+        digital_id_trust_score_rating:
+          type: string
+          description: Trust score rating for the digital ID (e.g., neutral, high).
+          nullable: true
+
+    Device:
+      type: object
+      description: Represents device information used in the fraud assessment.
+      nullable: true
+      properties:
+        device_id:
+          type: string
+          description: Unique identifier for the device.
+          nullable: true
+        device_first_seen:
+          type: string
+          description: Date when the device was first seen.
+          nullable: true
+        device_activities:
+          type: array
+          description: List of activities associated with the device.
+          items:
+            type: string
+          nullable: true
+        os:
+          type: string
+          description: Operating system of the device.
+          nullable: true
+        os_version:
+          type: string
+          description: Version of the operating system.
+          nullable: true
+        browser:
+          type: string
+          description: Browser used on the device.
+          nullable: true
+        browser_version:
+          type: string
+          description: Version of the browser.
+          nullable: true
+        agent_type:
+          type: string
+          description: Type of agent (e.g., browser_computer).
+          nullable: true
+        screen_res:
+          type: string
+          description: Screen resolution of the device.
+          nullable: true
+        timezone_name:
+          type: string
+          description: Timezone name of the device.
+          nullable: true
+
+    Network:
+      type: object
+      description: Represents network information used in the fraud assessment.
+      nullable: true
+      properties:
+        true_ip:
+          type: string
+          description: True IP address of the request.
+          nullable: true
+        true_ip_geo:
+          type: string
+          description: Geographical location code of the IP address (e.g., CH for Switzerland).
+          nullable: true
+        true_ip_region_iso_code:
+          type: string
+          description: ISO code for the region of the IP address.
+          nullable: true
+        true_ip_city:
+          type: string
+          description: City associated with the IP address.
+          nullable: true
+        true_ip_postal_code:
+          type: string
+          description: Postal code associated with the IP address.
+          nullable: true
+        true_ip_isp:
+          type: string
+          description: Internet Service Provider of the IP address.
+          nullable: true
+        true_ip_organization_type:
+          type: string
+          description: Type of organization associated with the IP address (e.g., Telecommunications).
+          nullable: true
+        browser_spoof_rating:
+          type: string
+          description: Rating indicating likelihood of browser spoofing (e.g., low, high).
+          nullable: true
+        vpn_rating:
+          type: string
+          description: Rating indicating likelihood of VPN usage (e.g., low, high).
+          nullable: true
+
+    NotifyLastDocumentReadyRequest:
+      type: object
+      properties:
+         signerIds:
+          items:
+            type: string
+            format: uuid
+          nullable: true
+          description: The specific signers can be notified for document signing by providing their `signerIds`. If no specific `signerIds` are provided, the last document readiness flag will be set to true for all signers by default.
+
+    IdentificationRedirectUrls:
+      type: object
+      nullable: true
+      properties:
+        success:
+          $ref: "#/components/schemas/Url"
+        verificationRejected:
+          $ref: "#/components/schemas/Url"
+        failed:
+          $ref: "#/components/schemas/Url"
+        timeout:
+          $ref: "#/components/schemas/Url"
+
+    SigningRedirectUrls:
+      type: object
+      nullable: true
+      properties:
+        success:
+          $ref: "#/components/schemas/Url"
+        rejected:
+          $ref: "#/components/schemas/Url"
+        failed:
+          $ref: "#/components/schemas/Url"
+        timeout:
+          $ref: "#/components/schemas/Url"
+        redoIdentification:
+          $ref: "#/components/schemas/Url"
+
+    Url:
+      type: string
+      format: url
+      maxLength: 1024
+      description: |
+        The customize URL in the request is required when redirect feature is enabled and default value is not available.
+        The format of provided URL must follow the RFC-3986 standard.
+        Below parameters must not be included in the URL if it is configured to be added by m_IDeal application.
+        * `ubiIdCaseId`
+        * `signerId`
+        * `extCaseId`
+        * `extPersonId`
+        * `extApplication`
+        * `ubiIdCategory`
+      nullable: true
+      example: "https://redirecturl.com?any_thing=abcXYZ"
+
+    SignatureLevel:
+      type: string
+      description: |
+        Level of assurance for the signature of the document when secondary signature is enabled.
+        * `AES`
+        * `QES`
+        * `SES`
+      enum:
+        - AES
+        - QES
+        - SES
+
+    LookupEvidenceResponse:
+      type: object
+      description: Found evidence information found by mobile phone number (msisdn)
+      properties:
+        isValid:
+          type: boolean
+          nullable: false
+          description: |
+            Validation result of evidence assurance level
+            * `true`: Assurance level of the evidence is greater than or equal to assurance level defined in signing profile
+            * `false`: The evidence is not found or assurance level of the evidence is less than assurance level defined in signing profile
+          example: true
+        profileAssuranceLevel:
+          type: integer
+          nullable: true
+          description: Value of assurance level defined in signing profile
+          example: 3
+        evidenceAssuranceLevel:
+          type: integer
+          nullable: true
+          description: Assurance level value of the evidence. This field will be `null` when evidence is not found.
+          example: 4
+        mobileId:
+          type: boolean
+          description: |
+            * `true`: when serialNumber of the evidence contains prefix 'MID'.
+            * `false`: other results.
+
+
+    LookupEvidenceBadRequestResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: '400 BAD_REQUEST'
+        errorMessage:
+          type: string
+          example: 'Required Integer parameter signProfileId is not present'
+
+    ResourceNotFoundResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: '404 NOT_FOUND'
+        errorMessage:
+          type: string
+          example: 'RESOURCE NOT FOUND'
+
+    Alpha3CountryCode:
+      nullable: true
+      type: string
+      description: |
+        Country code (ISO 3166-1, Alpha-3 code).
+        Note: For Kosovo, its Apha-3 code country abbreviation is 'XXK'
+      example: CHE
+
+    Base64EncodedFile:
+      type: object
+      description: |
+        File response with content encoded in base64 and its fileExtension
+      properties:
+        fileContent:
+          type: string
+          format: byte
+        fileExtension:
+          type: string
+          description: The file extension format will be pdf or zip
+          example: "pdf"
+
+    SignedDocumentWithHashResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        originalDocumentId:
+          type: string
+          format: uuid
+        extDocumentId:
+          type: string
+        displayName:
+          type: string
+        hash:
+          type: string
+          description: SHA-256 hash of the signed document.
+          example: 'abcdef1234567890...'

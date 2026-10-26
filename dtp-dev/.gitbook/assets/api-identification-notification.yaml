@@ -1,0 +1,435 @@
+openapi: 3.0.3
+
+info:
+  title: ubiID Notifications WebHook API for Tenant
+  description: |
+    # ubiID Tenant Notification API Specification
+
+    ## Overview
+
+    This OpenAPI documents Notification WebHook API that an ubiID Tenant **MUST** implement on their side to receive notifications from ubiID.
+
+    The endpoint of this API **SHOULD** be given to ubiID in prior to registration of the Tenant. Request to change the endpoint is supported.
+
+    Clients are recommended to ignore unused fields in the WebHook request's payload to avoid unnecessary errors in the event that new fields are added. 
+    
+    ## TLS
+
+    - The implementation of this API **MUST** support HTTPS (`TLS v1.2` and `v1.3`).
+    - Self-signed Certificates are **NOT** supported.
+
+    ## Responses
+
+    The implementation of the API **MUST** respond with a valid HTTP `2xx` status code (preferrably *without* response body). ubiID will discard the response body (if any). Other HTTP statuses (3xx, 4xx and 5xx) will be treated as failure and the Retry Policy will be applied.
+
+    ## Request Signature Verification
+
+    Each notification sent to the Tenant's endpoint always include a signature. The signature is generated using a **shared secret** so that the Tenant can verify if the request is sent from ubiID.
+
+    ### Request Headers
+
+    IMPORTANT: Please make sure to configure your Web Application Firewall to let one of the headers passthrough.
+
+    The following headers are sent along with each HTTP request.
+
+    NOTE: Prefixing `X-` with non-standard HTTP headers is a deprecated practice. However, we support `x-ubiid-*` for backward-compatibility.
+
+    #### `ubiid-notification-signature` and `x-ubiid-notification-signature`
+
+    Contains the HMAC-SHA512 signature computed by ubiID. You will need to compute the signature on your side and then compare it with our sigature to determine the request is not tampered with.
+
+    #### `ubiid-notification-timestamp` and `x-ubiid-notification-timestamp`
+
+    Contains the timestamp in ISO-8601 format (`YYYYMMDD'T'HHMMSS'Z'`). The time is always in UTC.
+
+    Examples: `20200623T000032Z`
+
+    ### Signature Generation Algorithm
+
+    Clients are recommended to use the WebHook request's body as raw string to verify against the Signature before unmarshalling to object types.
+
+    The following specifies how to verify the signature:
+
+    1 - Prepare the payload.
+
+        * Obtain the timestamp via the HTTP header `ubiid-notification-timestamp`.
+        * Append a pipe (`|`) character.
+        * Append the body of the notification. It MUST be a JSON string with all blank spaces need to be removed so that the whole JSON object is in one line. (This is like applying `JSON.stringify(requestBody)`).
+
+    2 - Use the shared *Secret* to compute a `HMAC-SHA512` using the payload as the message.
+
+    3 - Compare the computed signature with the one sent in `ubiid-notification-signature`.
+
+    ## Retry Policy
+
+    ubiID will retry the notification in case of failure with exponential backoff policy that will increase the wait time for each retry attempt until max number of attemps is reached. The maximum of notification will be 5 times.
+
+
+  contact:
+    email: m_ideal@mesoneer.io
+  version: 3.32.0
+  
+tags:
+  - name: tenant-api-for-notifications
+
+paths:
+  
+  "/notifications-webhook/":
+    post:
+      tags:
+        - tenant-api-for-notifications
+      summary: Receives Notifications from ubiID for ubiID Case States.
+      operationId: receiveNotification
+      parameters:
+        - name: ubiid-notification-signature
+          in: header
+          description: the Signature of the current request.
+          schema:
+            type: string
+          required: true
+        - name: ubiid-notification-timestamp
+          in: header
+          description: the timestamp in ISO-8601 format.
+          schema:
+            type: string
+            pattern: '^\d{8}T\d{6}Z$'
+            example: "20200623T000032Z"
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UbiIDCaseNotification'
+      responses:
+        200:
+          description: Confirmed! The response's body will be ignored (if any).
+        204:
+          description: Confirmed! No Content.
+
+
+components:
+  schemas:
+    UbiIDCaseNotification:
+      type: object
+      properties:
+        id:
+          description: The id of this request.
+          type: string
+          format: uuid
+        tenantId:
+          description: The id of the Tenant to receive the notification.
+          type: string
+          format: uuid
+        ubiIdCaseId:
+          description: The id of the ubiID Case that was updated.
+          type: string
+          format: uuid
+        extPersonId:
+          description: Person Id of external application (optional)
+          type: string
+        identityProfile:
+          description: The numeric id of a pre-configured profile.
+          type: integer
+        language:
+          $ref: '#/components/schemas/Language'
+        extCaseId:
+          description: >-
+            External Case Id can be set by the external application.
+            Supported characters for safe ZIP filename generation: letters (A-Z,
+            a-z), digits (0-9), '.', '\_', '-', '(', ')' and space. Other
+            characters are accepted but are replaced with '\_' in generated ZIP
+            filenames.
+          type: string
+        extApplication:
+          description: name of application ubiId service was called from
+          type: string
+        costCenter:
+          description: Cost center can be defined by customer.
+          type: string
+        ubiIdCategory:
+          description: category of ubiID Case. can be used for filtering in ubiId Backoffice application.
+          type: string
+        status:
+          $ref: '#/components/schemas/UbiIdStatus'
+        ubiIdStatusReason:
+          $ref: '#/components/schemas/UbiIdStatusReason'
+        ubiIdStatusDetails:
+          description: The details for that reason.
+          type: string
+        identificationFilesStatus:
+          $ref: '#/components/schemas/IdentificationFilesStatus'
+        missingFiles:
+          type: array
+          items:
+            description: The list of missing files
+            type: string
+            example: "video"
+        qTSPstatus:
+          $ref: '#/components/schemas/qTSPstatus'
+        createdTime:
+          description: The datetime when this ubiID case status is changed.
+          type: string
+          pattern: '^\d{8}T\d{6}Z$'
+          example: "20102020T151122Z"
+        additionalDocuments:
+          $ref: '#/components/schemas/AdditionalDocumentsResponse'
+        identificationLoadingDisplayed:
+          description: Loading page is displayed.
+          type: boolean
+        identificationSuccessInsideIframe:
+          description: Receive the success message from inside iframe.
+          type: boolean
+        
+    UbiIdStatus:
+      type: string
+      description: |
+        * `INITIALIZED` - ubiID Case is created but not started on eId
+        * `TIMEOUT` - session of a ubiId Case is time out
+        * `IDENTIFICATION_SUCCESSFUL` - result of identification was successful
+        * `IDENTIFICATION_FAILED` - identification failed
+        * `VERIFICATION_PENDING`- the verification process is pending
+        * `VERIFICATION_CONFIRMED` - Verification process successfully finished
+        * `VERIFICATION_REJECTED` - Manual Verification process failed
+        * `DOWNLOADED` - zip file of a identification case with previous status VERIFICATION_CONFIRMED is downloaded
+        * `DOWNLOAD_FAILED` - zip file of a identification case with previous status VERIFICATION_CONFIRMED is download failed.
+        * `DELETED` - person data and data deleted and deletion triggered on eId side 
+        * `DELETED_MARKED` - deletion triggered in ubiId application. will be deleted x days after action was triggered.
+        * `DELETED_TEMPORARY` - x days after a document was downloaded by the API the document basket is marked as temporary deleted.
+        * `SCHEDULED` - ubiID scheduled case is created but not started on eId.
+        * `CORRUPTED` - ubiId case has corrupted files, it is no longer valid to be used.
+        * `IDENTIFICATION_NOT_REQUIRED` - ubiID case is either identified by ubiID or has valid identification evidence by a qTSP provider.
+      enum:
+      - INITIALIZED
+      - TIMEOUT
+      - IDENTIFICATION_SUCCESSFUL
+      - IDENTIFICATION_FAILED
+      - VERIFICATION_PENDING
+      - VERIFICATION_CONFIRMED
+      - VERIFICATION_REJECTED
+      - DOWNLOADED
+      - DOWNLOAD_FAILED
+      - DELETED
+      - DELETED_MARKED
+      - DELETED_TEMPORARY
+      - IDENTIFICATION_NOT_REQUIRED
+      - SCHEDULED
+      - CORRUPTED
+    qTSPstatus:
+      type: string
+      enum: 
+      - NO_REGISTRATION
+      - REGISTRATION_OUTSTANDING
+      - REGISTRATION_INITIALIZED
+      - REGISTRATION_COMPLETED
+      - REGISTRATION_FAILED
+      description: |
+        * `NO_REGISTRATION` - status in case no verification by a RA-Agent is required (always the case for ubiIDmin)
+        * `REGISTRATION_OUTSTANDING` - verification of identification required after identification was done by enduser
+        * `REGISTRATION_INITIALIZED` - verification is initialized and assigned to a RA-Authority
+        * `REGISTRATION_COMPLETED` - verification confirmed by a RA-Agent
+        * `REGISTRATION_FAILED` - verification rejected by a RA-Agent
+    AdditionalDocumentsResponse:
+      description: List of additional documents used with Intrum.
+      type: array
+      items:
+        $ref: "#/components/schemas/AdditionalDocument"
+    AdditionalDocument:
+      type: object
+      nullable: true
+      properties:
+        type:
+          $ref: "#/components/schemas/IntrumAdditionalDocumentType"
+        status:
+          $ref: "#/components/schemas/IntrumAdditionalDocumentStatus"
+        subType:
+          $ref: "#/components/schemas/IntrumAdditionalDocumentSubType"
+        issuingDate:
+          description: |
+            issuing date of additional document.
+            *Note*:
+              - The field will be deprecated and replaced by entryDate.
+              - Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+          type: string
+          format: date
+          nullable: true
+        entryDate:
+          description: |
+            entry date of additional document.
+            *Note*: Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+          type: string
+          format: date
+          nullable: true
+        expiryDate:
+          description: |
+            expiry date of additional document.
+            *Note*: Omitted in response when `IntrumAdditionalDocumentType` is SIGNATURE
+          type: string
+          format: date
+          nullable: true
+    IntrumAdditionalDocumentStatus:
+      type: string
+      enum:
+      - OK
+      - NOK
+      - n/a
+      description: |
+        * `OK` - if according field of Intrum has value OK
+        * `NOK` - if according field of Intrum has value NOK
+        * `n/a` - if according field of Intrum has not value or is not available
+    IntrumAdditionalDocumentSubType:
+     type: string
+     enum:
+     - B
+     - C
+     - Ci
+     - F
+     - G
+     - L
+     - N
+     - S
+     - n/a
+     description: |
+      * `B` - if according field of Intrum has value B
+      * `C` - if according field of Intrum has value C
+      * `Ci` - if according field of Intrum has value Ci
+      * `F` - if according field of Intrum has value F
+      * `G` - if according field of Intrum has value G
+      * `L` - if according field of Intrum has value L
+      * `N` - if according field of Intrum has value N
+      * `S` - if according field of Intrum has value S
+      * `n/a` - if according field of Intrum has not value or is not available
+      * Omitted in request when `additionalDocumentType` is SIGNATURE
+    IntrumAdditionalDocumentType:
+      type: string
+      example: RESIDENCE_PERMIT
+      enum:
+      - NONE
+      - RESIDENCE_PERMIT
+      - SIGNATURE
+      - PERSON_WITH_ID_RESIDENCE_PERMIT
+      - PERSON_WITH_ID_SIGNATURE
+      - PERSON_WITH_ID
+      description: |
+        * `NONE` - default value for additional document type
+        * `RESIDENCE_PERMIT` - Residence permit
+        * `SIGNATURE` - Signature
+        * `PERSON_WITH_ID_RESIDENCE_PERMIT` - Person with ID residence permit
+        * `PERSON_WITH_ID_SIGNATURE` - Person with ID signature
+        * `PERSON_WITH_ID` - Person with ID
+    Language:
+      type: string
+      enum: 
+      - DE
+      - FR
+      - IT
+      - EN
+      description: |
+        * `DE` - German
+        * `FR` - France
+        * `IT` - Italian
+        * `EN` - English
+    IdentificationFilesStatus:
+      type: string
+      enum:
+      - PROCESSING
+      - READY
+      - INCOMPLETE
+      description: |
+        * `PROCESSING` - Files are being processed
+        * `READY` - Files have been processed successfully and ready for downloading
+        * `INCOMPLETE` - Files have been processed unsuccessfully and not ready for downloading
+
+    UbiIdStatusReason:
+      type: string
+      enum:
+      - PROCESSING
+      - MANDATORY_BASIC_CHECK_FAILED
+      - ABORTED
+      - REVIEW_PENDING
+      - CHECK_PENDING
+      - FRAUD_SUSPICION_PENDING
+      - SUCCESS
+      - SUCCESS_DATA_CHANGED
+      - CANCELED
+      - FRAUD_SUSPICION_CONFIRMED
+      - SIGNING_ABORTED
+      - InactiveUser.Aborted
+      - Authorization.Reused
+      - Recording.Error
+      - VideoID.Error
+      - User.Aborted
+      - Luminance.TooLow
+      - Camera.NotFound
+      - Https.Required
+      - Document.Illegible
+      - Connection.Lost
+      - Connection.Error
+      - IdType.Unauthorized
+      - MicrophonePermission.Denied
+      - FaceSpoofing.Detected
+      - Captcha.Invalid
+      - Document.NotAllowed
+      - Liveness.NotDetected
+      - Document.Tampered
+      - RTCConnection.Lost
+      - Camera.Unavailable
+      - CameraPermission.Denied
+      - FacesMismatch.Detected
+      - Bandwidth.TooLow
+      - VideoID.VersionNotSupported
+      - MaxLength.Exceeded
+      - Image.Blurred
+      - BWCopy.Detected
+      - Document.WrongSide
+      - CameraResolution.TooLow
+      - Connection.Unstable
+      - IdType.Invalid
+      - CameraRequirements.NotSatisfied
+      - Document.Rotated
+      description: |
+        The reason that the case status is updated:
+        * `PROCESSING` - Scan successfully but get ident from Intrum fail
+        * `MANDATORY_BASIC_CHECK_FAILED` - Scan successfully but integrity check failed
+        * `ABORTED` - User aborted
+        * `REVIEW_PENDING` - The verification process is pending
+        * `CHECK_PENDING` - The verification process is pending
+        * `FRAUD_SUSPICION_PENDING` - The verification process is pending
+        * `SUCCESS` - Verification process successfully finished
+        * `SUCCESS_DATA_CHANGED` - Verification process successfully finished
+        * `CANCELED` - Verification process failed
+        * `FRAUD_SUSPICION_CONFIRMED` - Verification process failed
+        * `SIGNING_ABORTED` - User stops signing process to reset password
+        * `InactiveUser.Aborted` - User is inactive and aborts the identification process
+        * `Authorization.Reused` - User tries to reuse the authorization URL
+        * `Recording.Error` - An error occurs during recording the video
+        * `VideoID.Error` - An error occurs during video identification
+        * `User.Aborted` - User aborts the identification process
+        * `Luminance.TooLow` - The luminance of the video is too low
+        * `Camera.NotFound` - No camera is found on the device
+        * `Https.Required` - The identification process requires HTTPS connection
+        * `Document.Illegible` - The document is illegible
+        * `Connection.Lost` - The connection is lost during the identification process
+        * `Connection.Error` - An error occurs during the connection in the identification process
+        * `IdType.Unauthorized` - The type of the document is not allowed for the identification process
+        * `MicrophonePermission.Denied` - The user denies the permission of using microphone
+        * `FaceSpoofing.Detected` - Face spoofing is detected during the identification process
+        * `Captcha.Invalid` - The captcha is invalid
+        * `Document.NotAllowed` - The document is not allowed for the identification process
+        * `Liveness.NotDetected` - The liveness is not detected during the identification process
+        * `Document.Tampered` - The document is tampered during the identification process
+        * `RTCConnection.Lost` - The RTC connection is lost during the identification process
+        * `Camera.Unavailable` - The camera is unavailable during the identification process
+        * `CameraPermission.Denied` - The user denies the permission of using camera
+        * `FacesMismatch.Detected` - The faces mismatch is detected during the identification process
+        * `Bandwidth.TooLow` - The bandwidth is too low during the identification process
+        * `VideoID.VersionNotSupported` - The version of video identification is not supported
+        * `MaxLength.Exceeded` - The length of video exceeds the maximum limit during the identification process
+        * `Image.Blurred` - The image is blurred during the identification process
+        * `BWCopy.Detected` - The black and white copy of document is detected during the identification process
+        * `Document.WrongSide` - The wrong side of document is scanned during the identification process
+        * `CameraResolution.TooLow` - The camera resolution is too low during the identification process
+        * `Connection.Unstable` - The connection is unstable during the identification process
+        * `IdType.Invalid` - The type of the document is invalid for the identification process
+        * `CameraRequirements.NotSatisfied` - The camera requirements are not satisfied for the identification process
+        * `Document.Rotated` - The document is rotated during the identification process
