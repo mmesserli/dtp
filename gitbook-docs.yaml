@@ -1,0 +1,11 @@
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+site:
+  title: DTP DEV
+  structure:
+    - type: space
+      key: space-1
+      title: DTP DEV
+      path: dtp-dev
+      default: true
+      content:
+        directory: ./dtp-dev
